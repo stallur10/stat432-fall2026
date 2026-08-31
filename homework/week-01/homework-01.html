@@ -2282,7 +2282,7 @@ x_{ij}\overset{\mathrm{iid}}{\sim}N(0,1),
 <ol type="a">
 <li>Generate the data and report the dimensions and rank of <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi mathvariant="bold-italic">𝑿</mi><annotation encoding="application/x-tex">\mathbf X</annotation></semantics></math>. Calculate the least-squares estimate <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mover><mi mathvariant="bold-italic">𝜷</mi><mo accent="true">̂</mo></mover><annotation encoding="application/x-tex">\widehat{\boldsymbol\beta}</annotation></semantics></math> using a numerically stable least-squares routine, without explicitly calculating <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false" form="prefix">(</mo><msup><mi mathvariant="bold-italic">𝑿</mi><mi mathvariant="sans-serif">𝖳</mi></msup><mi mathvariant="bold-italic">𝑿</mi><msup><mo stretchy="false" form="postfix">)</mo><mrow><mi>−</mi><mn>1</mn></mrow></msup></mrow><annotation encoding="application/x-tex">(\mathbf X^{\mathsf T}\mathbf X)^{-1}</annotation></semantics></math>. Compare the estimates with the coefficients used to generate the data.</li>
 </ol>
-<div id="03f1e4ac" class="cell" data-execution_count="1">
+<div id="3671188f" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>np.random.seed(<span class="dv">43201</span>)</span>
@@ -2329,7 +2329,7 @@ beta_hat - beta_true: [-0.129  -0.0278 -0.0816 -0.1753  0.0011 -0.0365]</code></
 \frac{1}{n}\sum_{i=1}^{n}r_i^2
 \right)^{1/2}.
 </annotation></semantics></math></p>
-<div id="2bd0d14a" class="cell" data-execution_count="2">
+<div id="93eeb5a1" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>y_hat <span class="op">=</span> X <span class="op">@</span> beta_hat</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>r <span class="op">=</span> y <span class="op">-</span> y_hat</span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>rmse <span class="op">=</span> np.sqrt(np.mean(r<span class="op">**</span><span class="dv">2</span>))</span>
@@ -2347,7 +2347,7 @@ Training RMSE: 0.8041178549628997</code></pre>
 <ol start="3" type="a">
 <li>Report <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mrow><mo stretchy="true" form="prefix">‖</mo><msup><mi mathvariant="bold-italic">𝑿</mi><mi mathvariant="sans-serif">𝖳</mi></msup><mi mathvariant="bold-italic">𝒓</mi><mo stretchy="true" form="postfix">‖</mo></mrow><mi>∞</mi></msub><annotation encoding="application/x-tex">\lVert\mathbf X^{\mathsf T}\mathbf r\rVert_\infty</annotation></semantics></math>. Explain why this value should be close to zero and what it tells us about the residual vector.</li>
 </ol>
-<div id="835092fc" class="cell" data-execution_count="3">
+<div id="f26ca963" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>XtR <span class="op">=</span> X.T <span class="op">@</span> r</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>inf_norm <span class="op">=</span> np.<span class="bu">max</span>(np.<span class="bu">abs</span>(XtR))</span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -2386,7 +2386,7 @@ N_n\left(\mathbf X\boldsymbol\beta,\sigma^2\mathbf I_n\right).
 <li>For fixed <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi mathvariant="bold-italic">𝜷</mi><annotation encoding="application/x-tex">\boldsymbol\beta</annotation></semantics></math>, differentiate the log-likelihood with respect to <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>σ</mi><mn>2</mn></msup><annotation encoding="application/x-tex">\sigma^2</annotation></semantics></math> and derive its maximum-likelihood estimate. Calculate this estimate at <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mover><mi mathvariant="bold-italic">𝜷</mi><mo accent="true">̂</mo></mover><annotation encoding="application/x-tex">\widehat{\boldsymbol\beta}</annotation></semantics></math> and compare it with the unbiased estimate of <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>σ</mi><mn>2</mn></msup><annotation encoding="application/x-tex">\sigma^2</annotation></semantics></math>. Explain why the two denominators differ.</li>
 </ol>
 <p>Setting <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>∂</mi><mi>ℓ</mi><mi>/</mi><mi>∂</mi><msup><mi>σ</mi><mn>2</mn></msup><mo>=</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">\partial\ell/\partial\sigma^2=0</annotation></semantics></math> gives <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msubsup><mover><mi>σ</mi><mo accent="true">̂</mo></mover><mtext mathvariant="normal">MLE</mtext><mn>2</mn></msubsup><mo>=</mo><mstyle displaystyle="false"><mfrac><mn>1</mn><mi>n</mi></mfrac></mstyle><mo stretchy="false" form="prefix">(</mo><mi mathvariant="bold-italic">𝒚</mi><mo>−</mo><mi mathvariant="bold-italic">𝑿</mi><mi mathvariant="bold-italic">𝜷</mi><msup><mo stretchy="false" form="postfix">)</mo><mi mathvariant="sans-serif">𝖳</mi></msup><mo stretchy="false" form="prefix">(</mo><mi mathvariant="bold-italic">𝒚</mi><mo>−</mo><mi mathvariant="bold-italic">𝑿</mi><mi mathvariant="bold-italic">𝜷</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">\widehat\sigma^2_{\text{MLE}} = \tfrac{1}{n}(\mathbf y-\mathbf X\boldsymbol\beta)^{\mathsf T}(\mathbf y-\mathbf X\boldsymbol\beta)</annotation></semantics></math>.</p>
-<div id="2e5c9ac0" class="cell" data-execution_count="4">
+<div id="e5579c2f" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>RSS <span class="op">=</span> np.<span class="bu">sum</span>(r<span class="op">**</span><span class="dv">2</span>)</span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>sigma2_mle <span class="op">=</span> RSS <span class="op">/</span> n</span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>sigma2_unbiased <span class="op">=</span> RSS <span class="op">/</span> (n <span class="op">-</span> X.shape[<span class="dv">1</span>])</span>
@@ -2413,7 +2413,7 @@ sigma^2_unbiased (divide by n - p - 1): 0.687878217734186</code></pre>
 \right)
 </annotation></semantics></math></p>
 <p>over a grid of <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>t</mi><annotation encoding="application/x-tex">t</annotation></semantics></math> values from <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>−</mi><mn>1.25</mn></mrow><annotation encoding="application/x-tex">-1.25</annotation></semantics></math> to <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mn>1.25</mn><annotation encoding="application/x-tex">1.25</annotation></semantics></math>. State where the maximum occurs and explain why this agrees with the least-squares result.</p>
-<div id="350cb255" class="cell" data-execution_count="5">
+<div id="349a8f91" class="cell" data-execution_count="5">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> loglik(beta, sigma2, X, y):</span>
 <span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    n <span class="op">=</span> <span class="bu">len</span>(y)</span>
 <span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    resid <span class="op">=</span> y <span class="op">-</span> X <span class="op">@</span> beta</span>
@@ -2497,7 +2497,7 @@ Figure 2: f(x) over [-40, 7]
 <ol start="2" type="a">
 <li>Use BFGS to minimize <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>f</mi><mo stretchy="false" form="prefix">(</mo><mi>x</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">f(x)</annotation></semantics></math> twice, starting at <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>x</mi><mrow><mo stretchy="false" form="prefix">(</mo><mn>0</mn><mo stretchy="false" form="postfix">)</mo></mrow></msup><mo>=</mo><mi>−</mi><mn>15</mn></mrow><annotation encoding="application/x-tex">x^{(0)}=-15</annotation></semantics></math> and <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>x</mi><mrow><mo stretchy="false" form="prefix">(</mo><mn>0</mn><mo stretchy="false" form="postfix">)</mo></mrow></msup><mo>=</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">x^{(0)}=0</annotation></semantics></math>. Supply <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>f</mi><mo>′</mo></msup><mo stretchy="false" form="prefix">(</mo><mi>x</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">f&#39;(x)</annotation></semantics></math> to the optimizer. For each run, report the final value of <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math>, the final objective value, <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false" form="prefix">|</mo><msup><mi>f</mi><mo>′</mo></msup><mo stretchy="false" form="prefix">(</mo><mi>x</mi><mo stretchy="false" form="postfix">)</mo><mo stretchy="false" form="prefix">|</mo></mrow><annotation encoding="application/x-tex">|f&#39;(x)|</annotation></semantics></math>, and whether the optimizer reported convergence.</li>
 </ol>
-<div id="a3f50ebd" class="cell" data-execution_count="8">
+<div id="5e22b4d1" class="cell" data-execution_count="8">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> scipy.optimize <span class="im">import</span> minimize</span>
 <span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> x0 <span class="kw">in</span> [<span class="op">-</span><span class="dv">15</span>, <span class="dv">0</span>]:</span>
@@ -2540,7 +2540,7 @@ u_i\overset{\mathrm{iid}}{\sim}N(0,1),
 <ol type="a">
 <li>Fit <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi mathvariant="bold-italic">𝒚</mi><annotation encoding="application/x-tex">\mathbf y</annotation></semantics></math> using <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi mathvariant="bold-italic">𝑿</mi><annotation encoding="application/x-tex">\mathbf X</annotation></semantics></math> and <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi mathvariant="bold-italic">𝑿</mi><mo>+</mo></msub><annotation encoding="application/x-tex">\mathbf X_+</annotation></semantics></math>. For each design matrix, report the condition number and training RMSE. For the augmented fit, also report the coefficients of <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi mathvariant="bold-italic">𝒙</mi><mn>1</mn></msub><annotation encoding="application/x-tex">\mathbf x_1</annotation></semantics></math> and <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi mathvariant="bold-italic">𝒙</mi><mn>6</mn></msub><annotation encoding="application/x-tex">\mathbf x_6</annotation></semantics></math>.</li>
 </ol>
-<div id="26c0b89d" class="cell" data-execution_count="9">
+<div id="ad3c1762" class="cell" data-execution_count="9">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>np.random.seed(<span class="dv">43202</span>)</span>
 <span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>u <span class="op">=</span> np.random.normal(<span class="dv">0</span>, <span class="dv">1</span>, size<span class="op">=</span>n)</span>
 <span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -2565,7 +2565,7 @@ coef x1: -782.737781243909  coef x6: 784.1078233409614</code></pre>
 <ol start="2" type="a">
 <li>Fit <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi mathvariant="bold-italic">𝒚</mi><mo>⋆</mo></msup><annotation encoding="application/x-tex">\mathbf y^\star</annotation></semantics></math> using <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi mathvariant="bold-italic">𝑿</mi><mo>+</mo></msub><annotation encoding="application/x-tex">\mathbf X_+</annotation></semantics></math>. Report the changes in the coefficients of <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi mathvariant="bold-italic">𝒙</mi><mn>1</mn></msub><annotation encoding="application/x-tex">\mathbf x_1</annotation></semantics></math> and <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi mathvariant="bold-italic">𝒙</mi><mn>6</mn></msub><annotation encoding="application/x-tex">\mathbf x_6</annotation></semantics></math>. Compare the two fitted-value vectors using their root mean squared difference and maximum absolute difference.</li>
 </ol>
-<div id="6c4f1393" class="cell" data-execution_count="10">
+<div id="3b3eb56a" class="cell" data-execution_count="10">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>y_star <span class="op">=</span> y <span class="op">+</span> <span class="fl">1e-3</span><span class="op">*</span>u</span>
 <span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>beta_hat_star, _, _, _ <span class="op">=</span> np.linalg.lstsq(X_plus, y_star, rcond<span class="op">=</span><span class="va">None</span>)</span>
 <span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a></span>
@@ -2593,7 +2593,7 @@ max abs diff fitted: 0.002622779196512326</code></pre>
 10(\mathbf x_6-\mathbf x_1)
 </annotation></semantics></math></p>
 <p>to explain why the fitted values change very little while the two coefficients change substantially. What does this example suggest about interpreting separate effects for nearly collinear predictors?</p>
-<div id="8b92c9ed" class="cell" data-execution_count="11">
+<div id="0e436840" class="cell" data-execution_count="11">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;max abs diff from identity:&quot;</span>, np.<span class="bu">max</span>(np.<span class="bu">abs</span>((y_star <span class="op">-</span> y) <span class="op">-</span> <span class="dv">10</span><span class="op">*</span>(x6 <span class="op">-</span> X[:, <span class="dv">1</span>]))))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>max abs diff from identity: 1.8318679906315083e-15</code></pre>
@@ -2610,7 +2610,7 @@ max abs diff fitted: 0.002622779196512326</code></pre>
 <p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mtext mathvariant="monospace">𝚏𝚎𝚊𝚝𝚞𝚛𝚎_𝚜𝚞𝚖</mtext><mo>=</mo><mtext mathvariant="monospace">𝚡𝟷</mtext><mo>+</mo><mtext mathvariant="monospace">𝚡𝟸</mtext><mi>.</mi></mrow><annotation encoding="application/x-tex">
 \texttt{feature\_sum}=\texttt{x1}+\texttt{x2}.
 </annotation></semantics></math></p>
-<div id="f6f02530" class="cell" data-execution_count="12">
+<div id="8bcfb678" class="cell" data-execution_count="12">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
 <span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> pd.read_csv(<span class="st">&quot;data/data-manipulation.csv&quot;</span>)</span>
@@ -2710,7 +2710,7 @@ dtype: int64</code></pre>
 <ol start="2" type="a">
 <li>For each group, report the number of observations, the mean response, and the mean of <code>feature_sum</code>. State clearly which observations these summaries describe.</li>
 </ol>
-<div id="a00784ce" class="cell" data-execution_count="13">
+<div id="7eaaadf8" class="cell" data-execution_count="13">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb23"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>group_summary <span class="op">=</span> (</span>
 <span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a>    analysis</span>
 <span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a>    .groupby(<span class="st">&quot;group&quot;</span>)</span>
@@ -2766,7 +2766,7 @@ dtype: int64</code></pre>
 <ol start="3" type="a">
 <li>Sort the analysis table by response from largest to smallest and report the first three rows, including <code>observation_id</code>, <code>group</code>, <code>response</code>, and <code>feature_sum</code>. Add code checks verifying that the number of retained rows equals the number of nonmissing responses in the original data, that the analysis table has no missing response values, and that its identifiers are unique.</li>
 </ol>
-<div id="0cf6c678" class="cell" data-execution_count="14">
+<div id="38e5bc72" class="cell" data-execution_count="14">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb24"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>top3 <span class="op">=</span> (analysis.sort_values(<span class="st">&quot;response&quot;</span>, ascending<span class="op">=</span><span class="va">False</span>)</span>
 <span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a>        .loc[:, [<span class="st">&quot;observation_id&quot;</span>, <span class="st">&quot;group&quot;</span>, <span class="st">&quot;response&quot;</span>, <span class="st">&quot;feature_sum&quot;</span>]].head(<span class="dv">3</span>))</span>
 <span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a>top3</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
@@ -2812,7 +2812,7 @@ dtype: int64</code></pre>
 </div>
 </div>
 </div>
-<div id="8af6690c" class="cell" data-execution_count="15">
+<div id="2c2c3bab" class="cell" data-execution_count="15">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb25"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> <span class="bu">len</span>(analysis) <span class="op">==</span> df[<span class="st">&quot;response&quot;</span>].notna().<span class="bu">sum</span>()</span>
 <span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> analysis[<span class="st">&quot;response&quot;</span>].isna().<span class="bu">sum</span>() <span class="op">==</span> <span class="dv">0</span></span>
 <span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a><span class="cf">assert</span> analysis[<span class="st">&quot;observation_id&quot;</span>].is_unique</span>
