@@ -1,0 +1,444 @@
+---
+title: "Homework 02"
+pagetitle: "Homework 02"
+body-classes: "lecture-page practice-page"
+format:
+  html:
+    embed-resources: true
+    page-layout: full
+    toc: true
+    toc-title: "On this page"
+    toc-depth: 2
+    code-fold: true
+    code-summary: "Show the starter code"
+---
+
+## Question 1: Training and test error under a fixed design
+
+Consider a linear regression problem with $n=100$ observations and $p=20$ available covariates. Generate one matrix $\mathbf X_{\mathrm{all}}\in\mathbb R^{n\times p}$ whose entries are independent $\mathcal N(0,1)$ random variables, and then keep this realized matrix fixed. Let
+
+$$
+\beta_j=0.4^{\sqrt{j}},
+\qquad j=1,\ldots,p,
+$$
+
+and define
+
+$$
+\boldsymbol\mu=\mathbf X_{\mathrm{all}}\boldsymbol\beta.
+$$
+
+Generate one training response and one independent test response from
+
+$$
+\begin{aligned}
+\mathbf y
+&=\boldsymbol\mu+\boldsymbol\epsilon,\\
+\mathbf y^*
+&=\boldsymbol\mu+\boldsymbol\epsilon^*,
+\end{aligned}
+$$
+
+where $\boldsymbol\epsilon,\boldsymbol\epsilon^*\overset{\mathrm{ind}}{\sim}\mathcal N_n(\mathbf 0,\mathbf I_n)$. Repeat this process independently 200 times, keeping $\mathbf X_{\mathrm{all}}$ fixed.
+
+a. For each $m$, calculate the average training and test MSE over the 200 simulation runs. Plot both curves against $m$. Verify numerically that training MSE does not increase as predictors are added in each simulation run.
+
+```{python}
+import numpy as np
+import matplotlib.pyplot as plt
+
+np.random.seed(43202)
+
+n, p = 100, 20
+X_all = np.random.normal(0, 1, size=(n, p))
+j_idx = np.arange(1, p + 1)
+beta = 0.4 ** np.sqrt(j_idx)
+mu = X_all @ beta
+
+n_sims = 200
+train_mse = np.zeros((n_sims, p + 1))
+test_mse = np.zeros((n_sims, p + 1))
+
+for s in range(n_sims):
+    eps = np.random.normal(0, 1, size=n)
+    eps_star = np.random.normal(0, 1, size=n)
+    y = mu + eps
+    y_star = mu + eps_star
+    for m in range(p + 1):
+        Xm = np.hstack([np.ones((n, 1)), X_all[:, :m]])
+        beta_hat, *_ = np.linalg.lstsq(Xm, y, rcond=None)
+        y_hat = Xm @ beta_hat
+        train_mse[s, m] = np.mean((y - y_hat) ** 2)
+        test_mse[s, m] = np.mean((y_star - y_hat) ** 2)
+
+avg_train_mse = train_mse.mean(axis=0)
+avg_test_mse = test_mse.mean(axis=0)
+
+# Verify training MSE is non-increasing in m, within each simulation run
+diffs = np.diff(train_mse, axis=1)
+print("Max increase in training MSE across all runs/steps:", diffs.max())
+print("Training MSE non-increasing in every run:", np.all(diffs <= 1e-8))
+
+m_vals = np.arange(p + 1)
+plt.figure(figsize=(6.5, 4.5))
+plt.plot(m_vals, avg_train_mse, label="Average training MSE", marker="o", markersize=3)
+plt.plot(m_vals, avg_test_mse, label="Average test MSE", marker="o", markersize=3)
+plt.xlabel("m (number of predictors)")
+plt.ylabel("MSE")
+plt.legend()
+plt.tight_layout()
+plt.show()
+```
+
+Training MSE never increases (max change $\le0$ up to rounding): enlarging $\mathbf X_m$ enlarges its column space, so the least-squares RSS for the same $\mathbf y$ cannot increase.
+
+b. For the model containing the first $m$ predictors, write $\mathbf X_m=[\mathbf 1,\mathbf x_1,\ldots,\mathbf x_m]$ and $\mathbf H_m=\mathbf X_m(\mathbf X_m^{\mathsf T}\mathbf X_m)^{-1}\mathbf X_m^{\mathsf T}$. Define the total squared approximation bias $B_m^2=\lVert(\mathbf I_n-\mathbf H_m)\boldsymbol\mu\rVert_2^2$. Calculate the two theoretical expectations and add them to your plot.
+
+```{python}
+# B_m^2: project the fixed mean vector mu onto the column space of X_m.
+# Projecting mu with lstsq gives H_m*mu without explicitly forming H_m.
+B2 = np.zeros(p + 1)
+for m in range(p + 1):
+    Xm = np.hstack([np.ones((n, 1)), X_all[:, :m]])
+    coef_mu, *_ = np.linalg.lstsq(Xm, mu, rcond=None)
+    mu_hat = Xm @ coef_mu
+    B2[m] = np.sum((mu - mu_hat) ** 2)
+
+sigma2 = 1.0
+theory_train = B2 / n + sigma2 * (1 - (m_vals + 1) / n)
+theory_test = B2 / n + sigma2 * (1 + (m_vals + 1) / n)
+
+plt.figure(figsize=(6.5, 4.5))
+plt.plot(m_vals, avg_train_mse, label="Average training MSE", marker="o", markersize=3)
+plt.plot(m_vals, avg_test_mse, label="Average test MSE", marker="o", markersize=3)
+plt.plot(m_vals, theory_train, "--", label=r"$E(\mathrm{MSE}_{train})$")
+plt.plot(m_vals, theory_test, "--", label=r"$E(\mathrm{MSE}_{test})$")
+plt.xlabel("m (number of predictors)")
+plt.ylabel("MSE")
+plt.legend()
+plt.tight_layout()
+plt.show()
+```
+
+The theoretical curves track the simulation averages closely at every $m$, as expected: averaging 200 independent draws of $\boldsymbol\epsilon,\boldsymbol\epsilon^*$ converges to the conditional expectations by the law of large numbers.
+
+c. Add the test MSE curve from one simulation run to the plot. Explain why this single curve is less smooth than the average test MSE, and why training MSE alone cannot be used to select the predictor count.
+
+```{python}
+one_run_test_mse = test_mse[0, :]
+
+plt.figure(figsize=(6.5, 4.5))
+plt.plot(m_vals, avg_train_mse, label="Average training MSE", marker="o", markersize=3)
+plt.plot(m_vals, avg_test_mse, label="Average test MSE", marker="o", markersize=3)
+plt.plot(m_vals, theory_train, "--", label=r"$E(\mathrm{MSE}_{train})$")
+plt.plot(m_vals, theory_test, "--", label=r"$E(\mathrm{MSE}_{test})$")
+plt.plot(m_vals, one_run_test_mse, color="gray", alpha=0.7, label="Test MSE, one run")
+plt.xlabel("m (number of predictors)")
+plt.ylabel("MSE")
+plt.legend()
+plt.tight_layout()
+plt.show()
+```
+
+The single-run curve is noisy because it reflects only one draw of $\boldsymbol\epsilon,\boldsymbol\epsilon^*$; averaging over 200 runs cancels that noise. Training MSE always decreases in $m$ (the $-(m+1)/n$ term keeps falling even after bias stops shrinking), so it rewards fitting noise rather than a better fit to $\boldsymbol\mu$. Test MSE instead adds $+(m+1)/n$, trading bias against variance, so it is minimized at an interior $m$.
+
+## Question 2: Prediction error at one target point
+
+Let $n=100$, $p=6$, and $\sigma^2=1$. Construct the fixed covariate matrix $\mathbf X_{\mathrm{all}}\in\mathbb R^{n\times p}$ with entries
+
+$$
+(\mathbf X_{\mathrm{all}})_{ij}=\sqrt{2}\cos\left\{\frac{\pi j(i-\tfrac12)}{n}\right\}.
+$$
+
+Keep $\mathbf X_{\mathrm{all}}$ fixed and generate one training response from $\mathbf y=\mathbf X_{\mathrm{all}}\boldsymbol\beta+\boldsymbol\epsilon$, $\boldsymbol\beta=(0.5,\ldots,0.5)^{\mathsf T}$. Consider prediction at $\mathbf x_0=(0,1,0,0,1,0)^{\mathsf T}$, with $\mu_0=\mathbf x_0^{\mathsf T}\boldsymbol\beta$.
+
+a. Calculate $\mu_0$, the theoretical squared bias, and the expected squared error for $m=0,\ldots,p$. Identify where the expected squared error changes and where it remains unchanged.
+
+```{python}
+n2, p2 = 100, 6
+i2 = np.arange(1, n2 + 1)[:, None]
+j2 = np.arange(1, p2 + 1)[None, :]
+X_all2 = np.sqrt(2) * np.cos(np.pi * j2 * (i2 - 0.5) / n2)
+
+beta2 = np.full(p2, 0.5)
+x0 = np.array([0, 1, 0, 0, 1, 0])
+sigma2_2 = 1.0
+
+mu0 = x0 @ beta2
+
+m_vals2 = np.arange(p2 + 1)
+bias2 = np.array([np.sum(x0[m:] * beta2[m:]) ** 2 for m in m_vals2])
+var_term = sigma2_2 / n2 * (1 + np.array([np.sum(x0[:m] ** 2) for m in m_vals2]))
+expected_sq_err = bias2 + var_term
+
+print("mu0 =", mu0)
+for m, b, v, e in zip(m_vals2, bias2, var_term, expected_sq_err):
+    print(f"m={m}: bias^2={b:.4f}, variance term={v:.4f}, expected sq. error={e:.4f}")
+
+print("Changes at m -> m+1:", np.round(np.diff(expected_sq_err), 4))
+```
+
+Only $x_{0,2}=1$ and $x_{0,5}=1$ are nonzero, so both the bias and variance terms change only when $m$ crosses 2 or 5 — dropping/rising at $m=1\to2$ and $m=4\to5$, flat elsewhere. The expected error is a squared bias from omitted mean-response components plus a variance from estimating each included coefficient.
+
+b. Use seed `43203`. Generate the response, fit the models, and calculate $(\widehat\mu_{0,m}-\mu_0)^2$, repeated 200 times. Plot the simulation averages and theoretical expectations together. Report the smallest $m$ that minimizes the theoretical error.
+
+```{python}
+np.random.seed(43203)
+
+n_sims2 = 200
+sq_err = np.zeros((n_sims2, p2 + 1))
+
+for s in range(n_sims2):
+    eps2 = np.random.normal(0, 1, size=n2)
+    y2 = X_all2 @ beta2 + eps2
+    for m in m_vals2:
+        Xm2 = np.hstack([np.ones((n2, 1)), X_all2[:, :m]])
+        coef, *_ = np.linalg.lstsq(Xm2, y2, rcond=None)
+        x0_row = np.concatenate([[1.0], x0[:m]])
+        mu0_hat = x0_row @ coef
+        sq_err[s, m] = (mu0_hat - mu0) ** 2
+
+avg_sq_err = sq_err.mean(axis=0)
+best_m = m_vals2[np.argmin(expected_sq_err)]
+
+print("Simulation-average squared error:", np.round(avg_sq_err, 4))
+print("Theoretical expected squared error:", np.round(expected_sq_err, 4))
+print("Smallest m minimizing theoretical error:", best_m)
+
+plt.figure(figsize=(6.5, 4.5))
+plt.plot(m_vals2, avg_sq_err, marker="o", label="Simulation average")
+plt.plot(m_vals2, expected_sq_err, "--", marker="o", markersize=3, label="Theoretical expectation")
+plt.xlabel("m (number of predictors)")
+plt.ylabel(r"$(\hat\mu_{0,m}-\mu_0)^2$")
+plt.legend()
+plt.tight_layout()
+plt.show()
+```
+
+The simulation averages track the theoretical curve closely. Both are minimized at $m=5$: by then both nonzero-loading directions are captured, and adding predictor 6 only adds variance with no bias reduction, so $m=6$ just ties $m=5$.
+
+c. Explain why only predictors 2 and 5 contribute directly to the mean response at $\mathbf x_0$. Contrast this target-specific error with the test MSE averaged over all rows of $\mathbf X_{\mathrm{all}}$ in Question 1.
+
+$\mu_0=\sum_j x_{0j}\beta_j$ weights each coefficient by $x_{0j}$, and $x_{0j}=0$ for $j\in\{1,3,4,6\}$, so those coefficients don't enter $\mu_0$ even though they're nonzero. Question 1's test MSE instead averages error over all rows of $\mathbf X_{\mathrm{all}}$, so it reflects every predictor's contribution — a predictor irrelevant at one target point can still lower overall test MSE by helping elsewhere.
+
+## Question 3: The optimism correction
+
+Choose one candidate model before observing the response, with design $\mathbf X\in\mathbb R^{n\times(p+1)}$, hat matrix $\mathbf H$, $\mathbf y=\boldsymbol\mu+\boldsymbol\epsilon$, $\mathbf y^*=\boldsymbol\mu+\boldsymbol\epsilon^*$ independent given $\mathbf X$, each with mean $\mathbf 0$ and covariance $\sigma^2\mathbf I_n$.
+
+a. Derive $E(\mathrm{MSE}_{\mathrm{train}}\mid\mathbf X)$ and $E(\mathrm{MSE}_{\mathrm{test}}\mid\mathbf X)$.
+
+**Training MSE.** Since $\mathbf H\mathbf y=\mathbf H\boldsymbol\mu+\mathbf H\boldsymbol\epsilon$,
+$$
+\mathbf y-\mathbf H\mathbf y=(\mathbf I-\mathbf H)\boldsymbol\mu+(\mathbf I-\mathbf H)\boldsymbol\epsilon.
+$$
+Using $(\mathbf I-\mathbf H)$ symmetric and idempotent,
+$$
+\lVert\mathbf y-\mathbf H\mathbf y\rVert^2
+=\lVert(\mathbf I-\mathbf H)\boldsymbol\mu\rVert^2
++2\boldsymbol\mu^{\mathsf T}(\mathbf I-\mathbf H)\boldsymbol\epsilon
++\boldsymbol\epsilon^{\mathsf T}(\mathbf I-\mathbf H)\boldsymbol\epsilon.
+$$
+The cross term vanishes since $E(\boldsymbol\epsilon\mid\mathbf X)=\mathbf 0$, and $E[\boldsymbol\epsilon^{\mathsf T}(\mathbf I-\mathbf H)\boldsymbol\epsilon\mid\mathbf X]=\sigma^2\operatorname{tr}(\mathbf I-\mathbf H)=\sigma^2(n-(p+1))$. Dividing by $n$,
+$$
+E(\mathrm{MSE}_{\mathrm{train}}\mid\mathbf X)=\frac{B^2}{n}+\sigma^2\left(1-\frac{p+1}{n}\right).
+$$
+
+**Test MSE.** Since $\mathbf y^*-\mathbf H\mathbf y=(\mathbf I-\mathbf H)\boldsymbol\mu+\boldsymbol\epsilon^*-\mathbf H\boldsymbol\epsilon$, with $\boldsymbol\epsilon^*$ independent of $\boldsymbol\epsilon$ and both mean zero, every cross term vanishes in expectation, leaving
+$$
+E(\mathrm{MSE}_{\mathrm{test}}\mid\mathbf X)
+=\frac{1}{n}\Big[B^2+E(\boldsymbol\epsilon^{*\mathsf T}\boldsymbol\epsilon^*\mid\mathbf X)+E(\boldsymbol\epsilon^{\mathsf T}\mathbf H^{\mathsf T}\mathbf H\boldsymbol\epsilon\mid\mathbf X)\Big].
+$$
+Here $E(\boldsymbol\epsilon^{*\mathsf T}\boldsymbol\epsilon^*\mid\mathbf X)=\sigma^2 n$, and since $\mathbf H^{\mathsf T}\mathbf H=\mathbf H$, $E(\boldsymbol\epsilon^{\mathsf T}\mathbf H\boldsymbol\epsilon\mid\mathbf X)=\sigma^2\operatorname{tr}(\mathbf H)=\sigma^2(p+1)$. Hence
+$$
+E(\mathrm{MSE}_{\mathrm{test}}\mid\mathbf X)=\frac{B^2}{n}+\sigma^2\left(1+\frac{p+1}{n}\right).
+$$
+
+b. Deduce the expected optimism and evaluate it for $n=120$, $p=4$, $B^2/n=0.04$, $\sigma^2=1$.
+
+The expected optimism is
+$$
+E(\mathrm{MSE}_{\mathrm{test}}-\mathrm{MSE}_{\mathrm{train}}\mid\mathbf X)=\frac{2\sigma^2(p+1)}{n}.
+$$
+
+```{python}
+n3, p3, B2_over_n, sigma2_3 = 120, 4, 0.04, 1.0
+
+e_train = B2_over_n + sigma2_3 * (1 - (p3 + 1) / n3)
+e_test = B2_over_n + sigma2_3 * (1 + (p3 + 1) / n3)
+optimism = e_test - e_train
+
+print("E(MSE_train | X) =", e_train)
+print("E(MSE_test  | X) =", e_test)
+print("Expected optimism =", optimism)
+print("2*sigma^2*(p+1)/n =", 2 * sigma2_3 * (p3 + 1) / n3)
+```
+
+This ordering holds only in expectation — for a single realized pair, sampling variability can still make $\mathrm{MSE}_{\mathrm{test}}<\mathrm{MSE}_{\mathrm{train}}$.
+
+c. Calculate $\widehat{\mathrm{MSE}}_{\mathrm{test}}$ and $C_p$ for $\mathrm{RSS}=116.4$, $\widehat\sigma^2=0.96$, $n=120$, $p=4$, and relate them.
+
+```{python}
+RSS, sigma2_hat3 = 116.4, 0.96
+
+mse_test_hat = (RSS + 2 * (p3 + 1) * sigma2_hat3) / n3
+Cp = RSS / sigma2_hat3 - n3 + 2 * (p3 + 1)
+
+print("MSE_test_hat =", mse_test_hat)
+print("C_p =", Cp)
+print("sigma2_hat * (1 + C_p / n) =", sigma2_hat3 * (1 + Cp / n3))
+```
+
+Solving $C_p=\mathrm{RSS}/\widehat\sigma^2-n+2(p+1)$ for RSS and substituting gives
+$$
+\widehat{\mathrm{MSE}}_{\mathrm{test}}=\widehat\sigma^2\left(1+\frac{C_p}{n}\right),
+$$
+confirmed numerically above. This is a strictly increasing function of $C_p$ when $n,\widehat\sigma^2$ are shared across candidates, so minimizing $C_p$ always minimizes $\widehat{\mathrm{MSE}}_{\mathrm{test}}$.
+
+## Question 4: Comparing Mallows' $C_p$, AIC, and BIC
+
+```{python}
+import pandas as pd
+
+diabetes = pd.read_csv("data/diabetes.csv")
+train4 = diabetes.iloc[:370].copy()
+n4 = 370
+
+def fit_ols(df, predictors):
+    X = np.column_stack([np.ones(len(df))] + [df[c].to_numpy() for c in predictors])
+    y = df["y"].to_numpy()
+    coef, *_ = np.linalg.lstsq(X, y, rcond=None)
+    resid = y - X @ coef
+    rss = np.sum(resid ** 2)
+    return coef, rss
+
+all_preds = ["age", "sex", "bmi", "bp", "s1", "s2", "s3", "s4", "s5", "s6"]
+predsA = ["bmi", "bp", "s5", "sex", "s1", "s2", "s4"]
+predsB = predsA + ["s6"]
+
+_, rss_full = fit_ols(train4, all_preds)
+p_full = len(all_preds)
+df_full = n4 - (p_full + 1)
+sigma2_hat4 = rss_full / df_full
+
+_, rss_A = fit_ols(train4, predsA)
+_, rss_B = fit_ols(train4, predsB)
+pA, pB = len(predsA), len(predsB)
+
+print("Full model: p =", p_full, " RSS =", round(rss_full, 3),
+      " df =", df_full, " sigma2_hat =", round(sigma2_hat4, 5))
+print("Model A:    p =", pA, " RSS =", round(rss_A, 3))
+print("Model B:    p =", pB, " RSS =", round(rss_B, 3))
+```
+
+a. $p=10$ for the full reference model, with residual RSS $\approx$ `{python} round(rss_full, 2)`, residual degrees of freedom $n-(p+1)=370-11=359$, and $\widehat\sigma^2=\mathrm{RSS}_{\mathrm{full}}/359\approx$ `{python} round(sigma2_hat4, 4)`. Model A has $p=7$ with $\mathrm{RSS}_A\approx$ `{python} round(rss_A, 2)`; Model B has $p=8$ with $\mathrm{RSS}_B\approx$ `{python} round(rss_B, 2)`.
+
+b.
+
+```{python}
+def criteria(rss, p, n, sigma2_hat):
+    Cp = rss / sigma2_hat - n + 2 * (p + 1)
+    aic_red = n * np.log(rss / n) + 2 * (p + 1)
+    bic_red = n * np.log(rss / n) + (p + 1) * np.log(n)
+    return Cp, aic_red, bic_red
+
+Cp_A, aic_A, bic_A = criteria(rss_A, pA, n4, sigma2_hat4)
+Cp_B, aic_B, bic_B = criteria(rss_B, pB, n4, sigma2_hat4)
+
+print(f"Model A: Cp={Cp_A:.3f}, AIC_red={aic_A:.3f}, BIC_red={bic_A:.3f}")
+print(f"Model B: Cp={Cp_B:.3f}, AIC_red={aic_B:.3f}, BIC_red={bic_B:.3f}")
+print("Cp selects:", "B" if Cp_B < Cp_A else "A")
+print("AIC selects:", "B" if aic_B < aic_A else "A")
+print("BIC selects:", "B" if bic_B < bic_A else "A")
+```
+
+$C_p$ and reduced AIC select Model B; reduced BIC selects Model A.
+
+c.
+
+```{python}
+rss_drop = rss_A - rss_B
+print("Reduction in RSS from adding s6:", round(rss_drop, 4))
+print("Cp penalty per parameter: 2 =>", 2)
+print("AIC penalty per parameter: 2 =>", 2)
+print("BIC penalty per parameter: log(n) =", round(np.log(n4), 4))
+```
+
+Adding `s6` reduces RSS only slightly. $C_p$ and AIC charge a flat 2-unit penalty per parameter, small enough that the improvement clears it — both favor Model B. BIC charges $\log(n)\approx$ `{python} round(np.log(n4), 2)` per parameter, too large for the same improvement to clear, so it prefers Model A. Selecting a model this way only shows the best fit-complexity trade-off among the candidates considered, not that it's the true data-generating model.
+
+## Question 5: Validation and final test data
+
+```{python}
+diabetes5 = pd.read_csv("data/diabetes.csv")
+train5 = diabetes5.iloc[:370].reset_index(drop=True)
+test5 = diabetes5.iloc[370:442].reset_index(drop=True)
+
+order = ["age", "sex", "bmi", "bp", "s1", "s2", "s3", "s4", "s5", "s6"]
+
+def design(df, m):
+    if m == 0:
+        return np.ones((len(df), 1))
+    return np.column_stack([np.ones(len(df))] + [df[c].to_numpy() for c in order[:m]])
+
+y_train5 = train5["y"].to_numpy()
+y_test5 = test5["y"].to_numpy()
+
+test_mses5 = []
+for m in range(11):
+    Xtr = design(train5, m)
+    Xte = design(test5, m)
+    coef, *_ = np.linalg.lstsq(Xtr, y_train5, rcond=None)
+    pred = Xte @ coef
+    test_mses5.append(np.mean((y_test5 - pred) ** 2))
+
+test_mses5 = np.array(test_mses5)
+best_m5 = np.argmin(test_mses5)
+print("Test MSE by m:", np.round(test_mses5, 3))
+print("Selected m:", best_m5, " reported 'final' MSE:", round(test_mses5[best_m5], 3))
+```
+
+a. The misuse begins at step 2: computing test MSE for all eleven models already uses the test data to compare candidates. Step 3 compounds this by picking the model that scored lowest by chance. Taking the minimum of eleven noisy estimates is systematically optimistic — the test data both chooses the model and grades it, so the reported error understates the true future error.
+
+b.
+
+```{python}
+from numpy.random import default_rng
+
+rng = default_rng(0)
+K = 5
+n_train5 = len(train5)
+fold_id = np.tile(np.arange(K), n_train5 // K + 1)[:n_train5]
+rng.shuffle(fold_id)
+
+cv_mse = np.zeros(11)
+for m in range(11):
+    fold_errs = []
+    for k in range(K):
+        is_val = fold_id == k
+        Xtr_k = design(train5.loc[~is_val], m)
+        Xval_k = design(train5.loc[is_val], m)
+        ytr_k = y_train5[~is_val]
+        yval_k = y_train5[is_val]
+        coef_k, *_ = np.linalg.lstsq(Xtr_k, ytr_k, rcond=None)
+        pred_k = Xval_k @ coef_k
+        fold_errs.append(np.sum((yval_k - pred_k) ** 2))
+    cv_mse[m] = np.sum(fold_errs) / n_train5
+
+best_m_cv = np.argmin(cv_mse)
+print("5-fold CV MSE by m:", np.round(cv_mse, 3))
+print("CV-selected m:", best_m_cv)
+
+# Refit the chosen model on all training data, then use the test data once
+Xtr_final = design(train5, best_m_cv)
+Xte_final = design(test5, best_m_cv)
+coef_final, *_ = np.linalg.lstsq(Xtr_final, y_train5, rcond=None)
+final_test_mse = np.mean((y_test5 - Xte_final @ coef_final) ** 2)
+print("Final test MSE at CV-selected m:", round(final_test_mse, 3))
+```
+
+Split the training data (rows 1-370) into five folds; for each $m$, fit on four folds and validate on the fifth, cycling through all five, and average to get a CV MSE for that $m$. Select $m$ minimizing CV MSE — no test data involved. Refit that model on all training data, then evaluate once, at the end, on the final test data (rows 371-442).
+
+c. The eleven values can still be reported as an exploratory summary of how test error varied with $m$, but not as an unbiased estimate of future prediction error, since the selection step in part (a) already biases it downward. A valid final estimate needs a fresh test set that played no role in choosing $m$.
+
+## Reference
+
+James, Witten, Hastie, Tibshirani, and Taylor, [*An Introduction to Statistical Learning*](https://www.statlearning.com/), Chapters 3, 5, and 6.
