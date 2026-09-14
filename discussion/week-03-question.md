@@ -1,0 +1,1 @@
+Why does ridge regression help make coefficient estimates more stable when predictors are highly correlated?

@@ -1,0 +1,357 @@
+---
+title: "Homework 03"
+pagetitle: "Homework 03"
+body-classes: "lecture-page practice-page"
+format:
+  html:
+    embed-resources: true
+    html-math-method: mathml
+    page-layout: full
+    toc: true
+    toc-location: body
+    toc-title: "On this page"
+    toc-depth: 2
+    code-fold: true
+    code-summary: "Show the workflow"
+---
+
+## Question 1: Build an `explain-to-me` skill
+
+I wrote `explain-to-me/SKILL.md` (reproduced in full at the end of this document): a short intent statement plus five rules — read only the one question I name, explain its goal and what's given vs. needed, flag easy-to-miss requirements, point to the two Week 3 ridge lecture pages when relevant, and never write code, a derivation, or the answer. I installed it as a project skill at `.claude/skills/explain-to-me/SKILL.md`.
+
+I tested it by asking the agent to use `explain-to-me` on Question 2. It correctly explained the goal (show why ridge stabilizes near-collinear coefficients), what's given versus what I still had to produce for parts (a)-(c), the easy-to-miss requirements (the lecture's specific standardization convention, reusing one noise draw across all three $\lambda$'s), and pointed me to the relevant lecture section — all without writing any code or stating a number. It didn't disturb my workflow, so I kept it.
+
+## Question 2: Ridge regression with nearly collinear predictors
+
+```{python}
+import numpy as np
+import matplotlib.pyplot as plt
+
+np.random.seed(43231)
+n = 100
+
+L = np.random.normal(size=n)
+U1 = np.random.normal(size=n)
+U2 = np.random.normal(size=n)
+X3 = np.random.normal(size=n)
+X4 = np.random.normal(size=n)
+X1 = L + 0.04 * U1
+X2 = L + 0.04 * U2
+X_raw = np.column_stack([X1, X2, X3, X4])
+
+def standardize(A):
+    # mean zero, average squared value one (population scaling)
+    mean = A.mean(axis=0)
+    Ac = A - mean
+    scale = np.sqrt((Ac ** 2).mean(axis=0))
+    return Ac / scale
+
+X = standardize(X_raw)
+p = X.shape[1]
+beta_true = np.array([1.5, 1.5, 1.0, 0.0])
+mu = X @ beta_true
+```
+
+a.
+
+```{python}
+corr12 = np.corrcoef(X[:, 0], X[:, 1])[0, 1]
+svals = np.linalg.svd(X, compute_uv=False)
+
+print("Correlation between X1 and X2:", round(corr12, 4))
+print("Singular values:", np.round(svals, 4))
+print("Largest singular value:", round(svals.max(), 4))
+print("Smallest singular value:", round(svals.min(), 4))
+```
+
+$X_1,X_2$ are almost perfectly correlated ($\approx0.998$) since both are dominated by the shared factor $L_i$. The large singular value ($\approx14.15$) corresponds to the strong-signal $X_1+X_2$ direction; the small one ($\approx0.41$) corresponds to the near-noise-only $X_1-X_2$ direction. Since OLS variance scales with the inverse squared singular value, $\widehat\beta_1-\widehat\beta_2$ should be roughly $(14.15/0.41)^2\approx1190$ times more variable than $\widehat\beta_1+\widehat\beta_2$.
+
+b.
+
+```{python}
+lambdas = [0.0, 0.02, 0.2]
+n_sims = 200
+results = {lam: {"b1": [], "b2": [], "sum": [], "diff": [],
+                  "train_mse": [], "test_mse": []} for lam in lambdas}
+
+for s in range(n_sims):
+    eps = np.random.normal(size=n)
+    eps_star = np.random.normal(size=n)
+    y = mu + eps
+    y_star = mu + eps_star
+    ybar = y.mean()
+    ytilde = y - ybar
+    for lam in lambdas:
+        beta_hat = np.linalg.solve(X.T @ X + n * lam * np.eye(p), X.T @ ytilde)
+        fitted = ybar + X @ beta_hat
+        r = results[lam]
+        r["b1"].append(beta_hat[0])
+        r["b2"].append(beta_hat[1])
+        r["sum"].append(beta_hat[0] + beta_hat[1])
+        r["diff"].append(beta_hat[0] - beta_hat[1])
+        r["train_mse"].append(np.mean((y - fitted) ** 2))
+        r["test_mse"].append(np.mean((y_star - fitted) ** 2))
+
+for lam in lambdas:
+    r = results[lam]
+    print(f"\nlambda = {lam}")
+    for key in ["b1", "b2", "sum", "diff"]:
+        arr = np.array(r[key])
+        print(f"  {key}: mean={arr.mean():.4f}, sd={arr.std(ddof=1):.4f}")
+    print(f"  average training MSE = {np.mean(r['train_mse']):.4f}")
+    print(f"  average test MSE     = {np.mean(r['test_mse']):.4f}")
+```
+
+c. At $\lambda=0$, $\widehat\beta_1,\widehat\beta_2$ are unbiased but wildly variable (sd $\approx1.63$), and their difference is worse still (sd $\approx3.26$), while their sum is already stable (sd $\approx0.09$). At $\lambda=0.02$, sd of $\widehat\beta_1,\widehat\beta_2$ and the difference drop by $\sim$12x with almost no change to the sum or the means; test MSE even improves slightly (1.040 vs. 1.048) — a small bias for a large variance cut. At $\lambda=0.2$, shrinkage is strong enough to bias the coefficients noticeably (mean sum $\approx2.73$ vs. true $3$), and test MSE rises above OLS (1.133). Ridge stabilizes the coefficients so much because it shrinks mainly the poorly-determined difference direction, and fitted values barely move because that direction contributes almost nothing to $\mathbf X\boldsymbol\beta$ in the first place ($X_1-X_2\approx0$ for every observation).
+
+## Question 3: What does ridge regression shrink?
+
+a. Differentiating $L_\lambda(\boldsymbol\beta)=\frac{1}{2n}\lVert\widetilde{\mathbf y}-\mathbf X\boldsymbol\beta\rVert_2^2+\frac{\lambda}{2}\lVert\boldsymbol\beta\rVert_2^2$ and setting the gradient to zero,
+$$
+-\frac{1}{n}\mathbf X^{\mathsf T}(\widetilde{\mathbf y}-\mathbf X\boldsymbol\beta)+\lambda\boldsymbol\beta=\mathbf 0
+\quad\Longrightarrow\quad
+\left(\frac{1}{n}\mathbf X^{\mathsf T}\mathbf X+\lambda\mathbf I_p\right)\boldsymbol\beta=\frac{1}{n}\mathbf X^{\mathsf T}\widetilde{\mathbf y},
+$$
+and multiplying by $n$ gives $(\mathbf X^{\mathsf T}\mathbf X+n\lambda\mathbf I_p)\widehat{\boldsymbol\beta}_\lambda=\mathbf X^{\mathsf T}\widetilde{\mathbf y}$. $\mathbf X^{\mathsf T}\mathbf X$ is positive semidefinite regardless of rank, so adding $n\lambda\mathbf I_p$ with $\lambda>0$ shifts every eigenvalue up by $n\lambda>0$, making the matrix strictly positive definite and invertible even when $\mathbf X$ is rank deficient or $p>n$.
+
+b. Write $\mathbf X=\mathbf U_r\mathbf D_r\mathbf V_r^{\mathsf T}$. Then $\mathbf X^{\mathsf T}\mathbf X=\mathbf V_r\mathbf D_r^2\mathbf V_r^{\mathsf T}$ acts as $\mathbf D_r^2$ on $\operatorname{span}(\mathbf V_r)$ and as $\mathbf 0$ elsewhere, so $\mathbf X^{\mathsf T}\mathbf X+n\lambda\mathbf I_p$ acts as $\mathbf D_r^2+n\lambda\mathbf I_r$ there and as $n\lambda\mathbf I$ on the orthogonal complement. Since $\mathbf X^{\mathsf T}\widetilde{\mathbf y}=\mathbf V_r\mathbf D_r\mathbf U_r^{\mathsf T}\widetilde{\mathbf y}$ lies entirely in $\operatorname{span}(\mathbf V_r)$, the solution has no component orthogonal to it, giving
+$$
+\widehat{\boldsymbol\beta}_\lambda=\mathbf V_r\left(\mathbf D_r^2+n\lambda\mathbf I_r\right)^{-1}\mathbf D_r\mathbf U_r^{\mathsf T}\widetilde{\mathbf y}.
+$$
+The fitted values are then
+$$
+\mathbf X\widehat{\boldsymbol\beta}_\lambda
+=\mathbf U_r\mathbf D_r\left(\mathbf D_r^2+n\lambda\mathbf I_r\right)^{-1}\mathbf D_r\mathbf U_r^{\mathsf T}\widetilde{\mathbf y}
+=\sum_{j=1}^r\frac{d_j^2}{d_j^2+n\lambda}\,\mathbf u_j\left(\mathbf u_j^{\mathsf T}\widetilde{\mathbf y}\right),
+$$
+so the fitted component along $\mathbf u_j$ is $\rho_j(\lambda)=d_j^2/(d_j^2+n\lambda)$ times the corresponding component of $\widetilde{\mathbf y}$.
+
+```{python}
+n3, lam3 = 100, 0.01
+d = np.array([10.0, 2.0, 0.2])
+rho = d**2 / (d**2 + n3 * lam3)
+df_eff3 = 1 + rho.sum()
+
+print("Shrinkage factors:", np.round(rho, 4))
+print("Effective degrees of freedom:", round(df_eff3, 4))
+```
+
+c. The third direction ($d_3=0.2$) receives the strongest shrinkage ($\rho_3\approx0.038$). Low-singular-value directions carry little signal, so their OLS component is mostly noise — damping it cuts variance. But if the true mean response has a real component along that weak direction, ridge would suppress genuine signal too, producing bias.
+
+## Question 4: Ridge regression and optimization
+
+```{python}
+a_eig = np.array([9.0, 0.01])
+lam4 = 0.09
+a_lambda_eig = a_eig + lam4
+
+cond_A0 = a_eig.max() / a_eig.min()
+cond_Alam = a_lambda_eig.max() / a_lambda_eig.min()
+print("Condition number of A0:", round(cond_A0, 2))
+print("Condition number of A_lambda:", round(cond_Alam, 2))
+```
+
+a. $\operatorname{cond}(\mathbf A_0)=900$; $\operatorname{cond}(\mathbf A_\lambda)\approx90.9$. Adding $\lambda\mathbf I_p$ raises the small eigenvalue proportionally far more than the large one, turning the objective's needle-shaped level sets much more circular — better conditioned for optimization.
+
+b. Since $L_\lambda$ is quadratic with curvature $\mathbf A_\lambda$, its gradient is $\nabla L_\lambda(\boldsymbol\beta)=\mathbf A_\lambda\boldsymbol\beta-\frac{1}{n}\mathbf X^{\mathsf T}\widetilde{\mathbf y}$, and the normal equation says $\mathbf A_\lambda\widehat{\boldsymbol\beta}_\lambda=\frac1n\mathbf X^{\mathsf T}\widetilde{\mathbf y}$, so $\nabla L_\lambda(\boldsymbol\beta)=\mathbf A_\lambda(\boldsymbol\beta-\widehat{\boldsymbol\beta}_\lambda)=\mathbf A_\lambda\mathbf e$ for $\mathbf e=\boldsymbol\beta-\widehat{\boldsymbol\beta}_\lambda$. Subtracting $\widehat{\boldsymbol\beta}_\lambda$ from both sides of the gradient step,
+$$
+\mathbf e^{(k+1)}=\mathbf e^{(k)}-\eta\mathbf A_\lambda\mathbf e^{(k)}=(\mathbf I-\eta\mathbf A_\lambda)\mathbf e^{(k)}.
+$$
+$\mathbf A_\lambda$ shares eigenvectors with $\mathbf A_0$, and along the eigendirection with unpenalized eigenvalue $a$, $\mathbf A_\lambda$ has eigenvalue $a+\lambda$, so $(\mathbf I-\eta\mathbf A_\lambda)$ multiplies that component of $\mathbf e^{(k)}$ by $1-\eta(a+\lambda)$.
+
+```{python}
+M = 9.09
+eta_interval = (0, 2 / M)
+print("Step-size interval contracting every direction: (0,", round(eta_interval[1], 4), ")")
+
+for eta_label, eta in [("1/M", 1 / M), ("2.1/M", 2.1 / M)]:
+    factors = 1 - eta * a_lambda_eig
+    print(f"eta = {eta_label} = {eta:.4f}: contraction factors = {np.round(factors, 4)}")
+```
+
+Every eigendirection contracts iff $|1-\eta(a+\lambda)|<1$ for both $a+\lambda\in\{9.09,0.10\}$, i.e. $0<\eta<2/M\approx0.220$.
+
+- At $\eta=1/M\approx0.110$: factor for $a=9$ is exactly $0$ (converges in one step); for $a=0.01$ it's $\approx0.989$ — nearly no progress.
+- At $\eta=2.1/M\approx0.231$: factor for $a=9$ is $-1.1$; $|-1.1|>1$, so that component grows unboundedly — gradient descent diverges.
+
+c. Choosing $\lambda$ to speed up convergence optimizes how fast an algorithm reaches *some* minimizer, not how well that minimizer predicts new data — a large $\lambda$ could make the landscape fast to solve while badly over-shrinking the estimator. $\lambda$ should instead be chosen by a prediction-accuracy criterion like cross-validation or GCV.
+
+## Question 5: Selecting the ridge penalty for real-estate prediction
+
+```{python}
+import pandas as pd
+
+realestate = pd.read_csv("data/realestate.csv")
+folds = pd.read_csv("data/realestate-split-folds.csv")
+data5 = realestate.merge(folds, on="row_id")
+predictors5 = ["date", "age", "distance", "stores", "latitude", "longitude"]
+
+train5 = data5[data5["split"] == "train"].reset_index(drop=True)
+test5 = data5[data5["split"] == "test"].reset_index(drop=True)
+
+lambdas5 = np.concatenate(([0.0], 10 ** (-4 + 0.05 * np.arange(121))))
+
+def standardize_fit(A):
+    mean = A.mean(axis=0)
+    scale = np.sqrt(((A - mean) ** 2).mean(axis=0))
+    return mean, scale
+
+def ridge_beta_grid(Xs, ytilde, lambdas):
+    # ridge coefficients for every lambda at once, via one SVD (Question 3b)
+    n_fit = Xs.shape[0]
+    U, d, Vt = np.linalg.svd(Xs, full_matrices=False)
+    Uty = U.T @ ytilde
+    shrink = d[:, None] / (d[:, None] ** 2 + n_fit * lambdas[None, :])
+    Beta = Vt.T @ (shrink * Uty[:, None])
+    return Beta, d
+```
+
+a.
+
+```{python}
+fold_ids = sorted(train5["cv_fold"].dropna().unique())
+fold_errors = np.zeros((len(fold_ids), len(lambdas5)))
+
+for i, k in enumerate(fold_ids):
+    is_val = train5["cv_fold"] == k
+    tr, va = train5.loc[~is_val], train5.loc[is_val]
+    mean_k, scale_k = standardize_fit(tr[predictors5].to_numpy())
+    Xtr = (tr[predictors5].to_numpy() - mean_k) / scale_k
+    Xva = (va[predictors5].to_numpy() - mean_k) / scale_k
+    ytr, yva = tr["price"].to_numpy(), va["price"].to_numpy()
+    ybar_k = ytr.mean()
+    Beta_k, _ = ridge_beta_grid(Xtr, ytr - ybar_k, lambdas5)
+    pred_va = ybar_k + Xva @ Beta_k
+    fold_errors[i, :] = np.mean((yva[:, None] - pred_va) ** 2, axis=0)
+
+mean_mse5 = fold_errors.mean(axis=0)
+se5 = fold_errors.std(axis=0, ddof=1) / np.sqrt(len(fold_ids))
+
+i_min = np.argmin(mean_mse5)
+lambda_min = lambdas5[i_min]
+threshold = mean_mse5[i_min] + se5[i_min]
+lambda_1se = lambdas5[mean_mse5 <= threshold].max()
+
+print("lambda_min:", round(lambda_min, 5), " mean CV MSE:", round(mean_mse5[i_min], 3),
+      " SE:", round(se5[i_min], 3))
+print("lambda_1se:", round(lambda_1se, 5), " mean CV MSE:",
+      round(mean_mse5[lambdas5 == lambda_1se][0], 3))
+
+plt.figure(figsize=(6.5, 4.5))
+pos = lambdas5 > 0
+plt.errorbar(lambdas5[pos], mean_mse5[pos], yerr=se5[pos], fmt="o", markersize=2,
+             elinewidth=0.5, alpha=0.6, label="10-fold CV MSE")
+plt.axvline(lambda_min, color="C1", linestyle="--", label=r"$\lambda_{\min}$")
+plt.axvline(lambda_1se, color="C2", linestyle="--", label=r"$\lambda_{1se}$")
+plt.xscale("log")
+plt.xlabel(r"$\lambda$")
+plt.ylabel("Cross-validated MSE")
+plt.legend()
+plt.tight_layout()
+plt.show()
+```
+
+b.
+
+```{python}
+mean_all, scale_all = standardize_fit(train5[predictors5].to_numpy())
+Xtr_all = (train5[predictors5].to_numpy() - mean_all) / scale_all
+ytr_all = train5["price"].to_numpy()
+n_all = len(ytr_all)
+ybar_all = ytr_all.mean()
+
+Beta_all, d_all = ridge_beta_grid(Xtr_all, ytr_all - ybar_all, lambdas5)
+fitted_all = ybar_all + Xtr_all @ Beta_all
+mse_train_all = np.mean((ytr_all[:, None] - fitted_all) ** 2, axis=0)
+
+df_eff5 = 1 + np.sum(
+    d_all[:, None] ** 2 / (d_all[:, None] ** 2 + n_all * lambdas5[None, :]), axis=0
+)
+gcv = mse_train_all / (1 - df_eff5 / n_all) ** 2
+lambda_gcv = lambdas5[np.argmin(gcv)]
+
+print("lambda_gcv:", round(lambda_gcv, 5), " GCV:", round(gcv.min(), 3))
+
+plt.figure(figsize=(6.5, 4.5))
+plt.plot(lambdas5[pos], gcv[pos], marker="o", markersize=2)
+plt.axvline(lambda_gcv, color="C1", linestyle="--", label=r"$\lambda_{GCV}$")
+plt.xscale("log")
+plt.xlabel(r"$\lambda$")
+plt.ylabel("GCV")
+plt.legend()
+plt.tight_layout()
+plt.show()
+```
+
+c.
+
+```{python}
+Xte = (test5[predictors5].to_numpy() - mean_all) / scale_all
+yte = test5["price"].to_numpy()
+
+chosen = {"OLS": 0.0, "lambda_min": lambda_min, "lambda_1se": lambda_1se, "lambda_gcv": lambda_gcv}
+rows = []
+for name, lam in chosen.items():
+    idx = np.where(lambdas5 == lam)[0][0]
+    beta = Beta_all[:, idx]
+    train_mse = np.mean((ytr_all - (ybar_all + Xtr_all @ beta)) ** 2)
+    test_mse = np.mean((yte - (ybar_all + Xte @ beta)) ** 2)
+    rows.append((name, lam, df_eff5[idx], train_mse, test_mse))
+
+summary5 = pd.DataFrame(rows, columns=["model", "lambda", "df_eff", "train_mse", "test_mse"])
+summary5
+```
+
+$\lambda_{\min}$ and $\lambda_{\mathrm{GCV}}$ are both small, close to OLS (df $\approx7$); $\lambda_{\mathrm{1se}}$ is far more aggressive (df $\approx3$), the simpler model the one-SE rule is designed to prefer. All four have similar test MSE, with the mildly-shrunk models doing slightly better here. Even so, the smallest observed test MSE must not be selected after seeing this table: the three $\lambda$'s were fixed before touching test data, and picking a "winner" from the test column afterward reintroduces the same selection-driven optimism as picking the best of several models by test error (Homework 2, Question 5) — the reported minimum would no longer be honest.
+
+## `explain-to-me` skill
+
+```{.markdown filename="explain-to-me/SKILL.md"}
+---
+name: explain-to-me
+description: Explains what one named homework question is asking - its goal, what's given, and what work is required - without writing or hinting at a solution. Use only when explicitly asked to use this skill to read and explain a specific homework question.
+metadata:
+  version: "1.0.0"
+---
+
+# explain-to-me
+
+## Intent
+
+Help me understand a homework question before I attempt it myself. Read the
+question I point to and explain it back to me in plain language. Do not
+solve it, do not write solution code or derivations, and do not state or
+imply the final numeric or algebraic answer.
+
+## Instructions
+
+1. Read only the specific question (and any shared setup/preamble it
+   depends on) that I name - not the other questions, and not any
+   solutions file, even if one exists in the repository.
+2. Explain, briefly:
+   - What the question's overall goal is (what quantity, plot, derivation,
+     or conclusion it wants me to produce).
+   - What is given versus what I still need to do (e.g. "generate this
+     data with this seed," "derive this formula," "report these specific
+     numbers").
+   - Any easy-to-miss requirement (a specific seed, a formula I must use,
+     a report or comparison the question asks for).
+3. If the question concerns ridge regression, point me to the relevant
+   part of one or both Week 3 lecture pages:
+   - [Ridge Regression: Stability Through Shrinkage](https://teazrq.github.io/stat432rpy/topics/ridge-regression/ridge-regression.html)
+   - [From a Penalized Objective to a Fitted Ridge Model](https://teazrq.github.io/stat432rpy/topics/ridge-regression/optimization-and-cross-validation.html)
+4. Never write the code, derivation, or final answer for the question. If
+   I ask you to also solve it, decline within this skill and tell me to
+   ask again without invoking `explain-to-me`.
+5. Keep the explanation short - a few sentences or a short bullet list,
+   not a rewritten copy of the whole question.
+
+## Out of scope
+
+Do not use this skill to grade, review, or improve my existing answers.
+Do not use it on any question I have not explicitly named.
+```
+
+## Reference
+
+The real-estate data come from I-Cheng Yeh's [Real Estate Valuation dataset](https://archive.ics.uci.edu/dataset/477/real%2Bestate%2Bvaluation%2Bda) in the UCI Machine Learning Repository. The distributed data retain the original observations and add only the course train-test and fold assignments.
