@@ -1,0 +1,341 @@
+---
+title: "Homework 04"
+pagetitle: "Homework 04"
+body-classes: "lecture-page practice-page"
+format:
+  html:
+    embed-resources: true
+    html-math-method: mathml
+    page-layout: full
+    toc: true
+    toc-location: body
+    toc-title: "On this page"
+    toc-depth: 2
+    code-fold: true
+    code-summary: "Show the workflow"
+---
+
+## Question 1: Signal strength and correlated substitutes
+
+Consider a regression problem with $n=120$ observations and $p=10$ covariates. Create one simulated dataset as follows. Generate the first covariate $X_1$ as $n$ independent standard normal draws. Then form the second covariate as
+
+$$
+X_2 = 0.999X_1 + \sqrt{1-0.999^2}\,Z,
+$$
+
+where $Z$ is another vector of $n$ independent standard normal draws, so that $X_1$ and $X_2$ have population correlation $0.999$. Generate the remaining covariates $X_3,\ldots,X_{10}$ as independent standard normal vectors of length $n$.
+
+Thus $X_1$ and $X_2$ are extremely highly correlated, while $X_3$ and $X_4$ are independent of one another and of the remaining covariates. Finally, generate the response as
+
+$$
+Y
+=
+0.15X_1
++0.15X_2
++0.30X_3
++0.15X_4
++\epsilon,
+$$
+
+where $\epsilon$ is a vector of $n$ independent standard normal errors, independent of the covariates. Both members of the correlated pair appear in the generating equation with the same coefficient, even though each one carries almost the same observed information as the other. The two independent signals $X_3$ and $X_4$ have coefficients that differ by a factor of two, and $X_5,\ldots,X_{10}$ have zero coefficients.
+
+Use seed `43246` and independently repeat the complete data generation and fitting procedure 200 times. Within each repetition, center and standardize the covariates using divisor $n$ and center the response. Fit the lasso model with the `glmnet` package in R or `sklearn.linear_model.Lasso` in Python, without scaling the variables inside the fitting function, at
+
+$$
+\lambda\in\{0.08,0.12,0.18,0.24\}.
+$$
+
+Fit all four penalties to the same generated dataset before beginning the next repetition. Leave the intercept unpenalized and convert the fitted slopes back to the original covariate scale. Store the slopes in one array whose dimensions correspond to the 200 repetitions, 10 covariates, and four penalties. Treat a slope as nonzero when its absolute value exceeds $10^{-8}$. Use `tol=1e-10, max_iter=100000` in Python. Verify that all 800 fits converge.
+
+```{python}
+import warnings
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.linear_model import Lasso, ElasticNet
+from sklearn.exceptions import ConvergenceWarning
+
+warnings.simplefilter("error", ConvergenceWarning)   # any non-convergence raises
+
+np.random.seed(43246)
+n, p, reps = 120, 10, 200
+lams = [0.08, 0.12, 0.18, 0.24]
+rho = 0.999
+
+datasets = []
+for _ in range(reps):
+    X = np.empty((n, p))
+    X[:, 0] = np.random.normal(size=n)
+    Z = np.random.normal(size=n)
+    X[:, 1] = rho * X[:, 0] + np.sqrt(1 - rho**2) * Z
+    X[:, 2:] = np.random.normal(size=(n, p - 2))
+    eps = np.random.normal(size=n)
+    y = 0.15 * X[:, 0] + 0.15 * X[:, 1] + 0.30 * X[:, 2] + 0.15 * X[:, 3] + eps
+    datasets.append((X, y))
+
+def fit_all(make_model):
+    B = np.zeros((reps, p, len(lams)))          # repetitions x covariates x penalties
+    n_fits = 0
+    for r, (X, y) in enumerate(datasets):
+        xbar = X.mean(axis=0)
+        s = np.sqrt(((X - xbar) ** 2).mean(axis=0))      # divisor n
+        Xs, yc = (X - xbar) / s, y - y.mean()
+        for l, lam in enumerate(lams):
+            m = make_model(lam).fit(Xs, yc)
+            assert m.n_iter_ < 100000
+            B[r, :, l] = m.coef_ / s                     # back to the original scale
+            n_fits += 1
+    print("Fits converged:", n_fits)
+    return B
+
+B_lasso = fit_all(lambda a: Lasso(alpha=a, fit_intercept=False, tol=1e-10, max_iter=100000))
+
+names = [f"X{j}" for j in range(1, p + 1)]
+def summaries(B):
+    sel = pd.DataFrame((np.abs(B) > 1e-8).mean(axis=0), index=names, columns=lams)
+    mag = pd.DataFrame(np.abs(B).mean(axis=0), index=names, columns=lams)
+    return sel, mag
+
+def line_plot(df, ylabel):
+    plt.figure(figsize=(6.5, 4.2))
+    for j, nm in enumerate(names):
+        noise = j >= 4
+        plt.plot(lams, df.loc[nm], marker="o", markersize=3,
+                 color="lightgray" if noise else f"C{j}", lw=1 if noise else 2,
+                 label=None if (noise and nm != "X5") else ("X5-X10" if noise else nm))
+    plt.xlabel(r"$\lambda$"); plt.ylabel(ylabel); plt.legend(); plt.tight_layout(); plt.show()
+```
+
+a. For every covariate and penalty, report the selection frequency and the mean absolute fitted slope, where the mean includes fitted zeros. Draw one figure for each summary. Explain how increasing the penalty changes the fitted magnitudes and selection frequencies.
+
+```{python}
+sel_l, mag_l = summaries(B_lasso)
+print("Selection frequency (lasso)"); print(sel_l.round(3))
+print("\nMean absolute slope (lasso)"); print(mag_l.round(4))
+line_plot(sel_l, "Selection frequency")
+line_plot(mag_l, "Mean absolute fitted slope")
+```
+
+Raising $\lambda$ shrinks every fitted magnitude and lowers every selection frequency. The drop is steepest for weak or null covariates: noise covariates fall from about 0.36 selected at $\lambda=0.08$ to under 0.01 at $0.24$, $X_4$ (coefficient 0.15) from 0.74 to 0.18, while the strong $X_3$ (0.30) stays selected 70% of the time even at $0.24$.
+
+b. For the pair $(X_1,X_2)$, report the frequency of four mutually exclusive outcomes at each penalty: only the first covariate is selected, only the second is selected, both are selected, and neither is selected. Compare the two marginal selection frequencies and explain why they are similar. Describe how the four outcomes shift as the penalty increases, and explain why lasso can produce a sparse fitted rule that omits one member of the pair even though both members appear in the generating equation.
+
+```{python}
+def pair_outcomes(B):
+    a, b = np.abs(B[:, 0, :]) > 1e-8, np.abs(B[:, 1, :]) > 1e-8
+    return pd.DataFrame({"only X1": (a & ~b).mean(0), "only X2": (~a & b).mean(0),
+                         "both": (a & b).mean(0), "neither": (~a & ~b).mean(0)}, index=lams)
+
+out_l = pair_outcomes(B_lasso)
+out_l
+```
+
+The marginals are similar ($0.56$ vs. $0.47$ at $\lambda=0.08$) because $X_1,X_2$ enter the model symmetrically and are almost interchangeable, so which one the lasso picks is close to a coin flip. As $\lambda$ grows, "only one" stays dominant while "neither" rises (0.015 to 0.27) and "both" nearly vanishes (0.045 to 0.01). With correlation $0.999$, one member alone can absorb the combined effect ($0.15+0.15$), and adding the second brings almost no fit improvement but costs extra $\ell_1$ penalty, so a sparse rule keeps only one.
+
+c. Compare the selection frequencies of $X_3$ and $X_4$ with the average selection frequency among $X_5,\ldots,X_{10}$. Explain how signal magnitude and the penalty account for the pattern. Use the correlated pair to explain why a fitted zero does not establish that the corresponding population coefficient is zero, and why a nonzero fitted coefficient does not establish that the variable is uniquely important.
+
+```{python}
+pd.DataFrame({"X3": sel_l.loc["X3"], "X4": sel_l.loc["X4"],
+              "avg X5-X10": sel_l.loc[names[4:]].mean()}).round(3)
+```
+
+Selection frequency follows signal size: $X_3$ (0.995 to 0.70) $>$ $X_4$ (0.74 to 0.175) $>$ noise (0.36 to 0.008), since a larger coefficient survives a larger soft-threshold, and a bigger penalty separates the groups more sharply. In the correlated pair, $X_1$ is often fitted at exactly zero although its true coefficient is $0.15$, because $X_2$ stood in for it; and when $X_1$ is nonzero it is not uniquely important, since $X_2$ could have been chosen instead.
+
+## Question 2: Elastic net with an equal penalty mix
+
+This question continues the simulation of Question 1. Generate the data exactly as in Question 1, with the same seed `43246`, so that the 200 repetitions produce the same datasets and the only change is the fitting method. Now fit the elastic net model with mixing parameter $\alpha=0.5$, which places equal weight on the $\ell_1$ and squared $\ell_2$ penalties. Use `sklearn.linear_model.ElasticNet` in Python (`l1_ratio=0.5`), with the same four penalties $\lambda\in\{0.08,0.12,0.18,0.24\}$ and the same fitting details as in Question 1.
+
+```{python}
+B_enet = fit_all(lambda a: ElasticNet(alpha=a, l1_ratio=0.5, fit_intercept=False,
+                                      tol=1e-10, max_iter=100000))
+sel_e, mag_e = summaries(B_enet)
+```
+
+a. For every covariate and penalty, report the selection frequency, and draw the selection-frequency figure. Compare the frequencies with the lasso results from Question 1: which covariates change the most, and in which direction?
+
+```{python}
+print(sel_e.round(3))
+line_plot(sel_e, "Selection frequency (elastic net)")
+print("\nChange from lasso:"); print((sel_e - sel_l).round(3))
+```
+
+Selection frequencies rise for every covariate. $X_1$ and $X_2$ change the most (e.g. 0.56 to 0.96 and 0.47 to 0.97 at $\lambda=0.08$), followed by $X_4$ and the noise covariates.
+
+b. For the pair $(X_1,X_2)$, report the frequency of four mutually exclusive outcomes at each penalty: only the first covariate is selected, only the second is selected, both are selected, and neither is selected. Compare these frequencies with Question 1. Are the two covariates now properly selected together? Explain why the squared $\ell_2$ part of the penalty encourages the fit to keep both members of the pair.
+
+```{python}
+pair_outcomes(B_enet)
+```
+
+Yes: "both" is now selected 93-96% of the time (vs. 1-5% under the lasso), and "only one" is rare. The squared $\ell_2$ term penalizes an unequal split of weight between near-duplicate columns, so it is cheaper to share the effect across both than to load it on one (the grouping effect).
+
+c. Compare the average selection frequency among the noise covariates $X_5,\ldots,X_{10}$ with the lasso results at each penalty. Are the noise covariates still screened out as the penalty increases? At the same numerical value of $\lambda$, the elastic net applies a weaker $\ell_1$ threshold than the lasso; use this to explain any difference. State the penalties at which the elastic net selects both members of the pair while screening out most noise covariates.
+
+```{python}
+pd.DataFrame({"lasso": sel_l.loc[names[4:]].mean(), "elastic net": sel_e.loc[names[4:]].mean(),
+              "EN: both X1,X2": pair_outcomes(B_enet)["both"]}).round(3)
+```
+
+Noise is still screened as $\lambda$ increases (0.63 to 0.19), but far more slowly than under the lasso (0.36 to 0.008), because the $\ell_1$ threshold is only $\alpha\lambda=0.5\lambda$. The elastic net selects both members of the pair and screens out most noise (at least 68%) at $\lambda=0.18$ (noise selected 0.32) and $\lambda=0.24$ (0.19); at $0.08$ and $0.12$ about half or more of the noise is still selected.
+
+## Question 3: Coordinate descent and the lasso path
+
+This question asks you to implement coordinate descent yourself and use it to compute a complete lasso path. Create one simulated dataset with $n=100$ observations and $p=3$ covariates. Generate three covariates as independent standard normal vectors of length $n$, and generate the response as
+
+$$
+Y
+=
+1.5+X_1-2X_2+\epsilon,
+$$
+
+where $\epsilon$ is a vector of $n$ independent standard normal errors, independent of the covariates. The third covariate does not appear in the generating equation. Use seed `43247`. Center the response and center and standardize each covariate using divisor $n$. The intercept is fitted separately as the mean of the response and is not penalized.
+
+The lasso objective is
+
+$$
+L_\lambda(\boldsymbol\beta)
+=
+\frac{1}{2n}
+\left\lVert
+\widetilde{\mathbf y}-\mathbf X\boldsymbol\beta
+\right\rVert_2^2
++
+\lambda\lVert\boldsymbol\beta\rVert_1,
+$$
+
+where $\widetilde{\mathbf y}$ is the centered response and $\mathbf X$ is the standardized covariate matrix. Coordinate descent updates one slope at a time while holding the other slopes fixed. For coordinate $j$, form the residual that leaves covariate $j$ out of the current fit, and compute the score $a_j$ as the mean of the elementwise product of covariate $j$ and that residual. Because each standardized column satisfies $\frac{1}{n}\mathbf x_j^{\mathsf T}\mathbf x_j=1$, the update is the soft-thresholding rule from the Week 4 lecture:
+
+$$
+\widehat\beta_j\leftarrow S(a_j,\lambda),
+\qquad
+S(a,\lambda)=\operatorname{sign}(a)(|a|-\lambda)_+.
+$$
+
+Follow this procedure:
+
+1. Fix a value of $\lambda$ and loop over the indices $j=1,\ldots,p$ until the coefficients stop changing. For each $j$, form the residual without covariate $j$, compute its score, and save the soft-thresholded value as the new $\widehat\beta_j$ before moving to the next index.
+2. Check convergence after each complete cycle: stop when the largest absolute coefficient change is below a small tolerance, such as $10^{-8}$. Record the fitted vector for that $\lambda$.
+3. Then reduce $\lambda$ to the next grid value and start the next fit from the current coefficients (a warm start). Repeat for the whole grid
+
+$$
+\lambda\in\{2.5,2.0,1.5,1.0,0.6,0.4,0.25,0.15,0.08,0.03\}.
+$$
+
+a. Implement the procedure. Report the fitted coefficient vector at each grid value in a small table, and verify that every fit converged. Compute $\lambda_{\max}=\lVert\frac{1}{n}\mathbf X^{\mathsf T}\widetilde{\mathbf y}\rVert_\infty$ and check that all slopes are zero for grid values at or above it.
+
+```{python}
+np.random.seed(43247)
+n3, p3 = 100, 3
+X3 = np.random.normal(size=(n3, p3))
+eps3 = np.random.normal(size=n3)
+y3 = 1.5 + X3[:, 0] - 2 * X3[:, 1] + eps3
+
+Xc = X3 - X3.mean(axis=0)
+Xs3 = Xc / np.sqrt((Xc ** 2).mean(axis=0))
+yc3 = y3 - y3.mean()
+
+def soft(a, lam):
+    return np.sign(a) * max(abs(a) - lam, 0.0)
+
+grid = [2.5, 2.0, 1.5, 1.0, 0.6, 0.4, 0.25, 0.15, 0.08, 0.03]
+beta = np.zeros(p3)                        # warm start carried along the grid
+path, cycles = [], []
+for lam in grid:
+    for it in range(1, 100001):
+        old = beta.copy()
+        for j in range(p3):
+            r = yc3 - Xs3 @ beta + Xs3[:, j] * beta[j]     # residual without covariate j
+            beta[j] = soft(np.mean(Xs3[:, j] * r), lam)
+        if np.max(np.abs(beta - old)) < 1e-8:
+            break
+    assert it < 100000
+    path.append(beta.copy()); cycles.append(it)
+
+path = np.array(path)
+lam_max = np.max(np.abs(Xs3.T @ yc3 / n3))
+print(pd.DataFrame(path, index=grid, columns=["beta1", "beta2", "beta3"]).assign(cycles=cycles).round(4))
+print("All fits converged (max cycles):", max(cycles))
+print("lambda_max:", round(lam_max, 4))
+print("All slopes zero for grid values >= lambda_max:",
+      all(np.all(path[i] == 0) for i, g in enumerate(grid) if g >= lam_max))
+```
+
+All ten fits converged within 6 cycles. $\lambda_{\max}\approx2.127$, and the only grid value at or above it ($\lambda=2.5$) gives all-zero slopes, as expected.
+
+b. Plot the coefficient path: one curve per covariate, with the fitted slope on the vertical axis and $\log(\lambda)$ on the horizontal axis. Describe the order in which the covariates enter the model and explain that order using the sizes of the true coefficients.
+
+```{python}
+plt.figure(figsize=(6.5, 4.2))
+for j in range(p3):
+    plt.plot(np.log(grid), path[:, j], marker="o", label=f"$X_{j+1}$")
+plt.axhline(0, color="gray", lw=0.5)
+plt.xlabel(r"$\log(\lambda)$"); plt.ylabel("Fitted slope"); plt.legend(); plt.tight_layout(); plt.show()
+```
+
+$X_2$ enters first (just below $\lambda_{\max}\approx2.13$), then $X_1$ (between $\lambda=1.0$ and $0.6$); $X_3$ never enters. The order matches the true coefficient magnitudes ($|-2|>|1|>0$): a larger effect has a larger score $a_j$, so it clears the threshold $\lambda$ earlier.
+
+c. The third covariate has a zero population coefficient. Does it enter the path at small penalties in your run? Compare the fit at the smallest grid value with a least-squares fit on the same standardized data, and explain why the two are close but not identical.
+
+```{python}
+ols3 = np.linalg.lstsq(Xs3, yc3, rcond=None)[0]
+print("lasso, lambda=0.03:", np.round(path[-1], 4))
+print("OLS:               ", np.round(ols3, 4))
+```
+
+No: $\widehat\beta_3$ stays exactly zero even at $\lambda=0.03$ (its OLS estimate is only $0.028$, below the threshold). The lasso fit at $\lambda=0.03$ is close to OLS but slightly shrunk toward zero (e.g. $-2.21$ vs. $-2.24$), since the soft-threshold subtracts about $\lambda$ from each score; they would coincide only as $\lambda\to0$.
+
+## Question 4: Tuning and comparing penalized regressions for diabetes prediction
+
+The supplied `data/diabetes.csv` contains 442 observations of ten baseline covariates and the quantitative response `y`. The file `data/diabetes-split-folds.csv` assigns 353 observations to the training set and 89 observations to the final test set; it also supplies ten fold labels for the training observations.
+
+Tune three penalized regressions (lasso, ridge, and elastic net with mixing parameter $\alpha=0.5$) for predicting `y` from the ten covariates. Using only the training observations, perform ten-fold cross-validation with the supplied folds for each method and select each penalty by the smallest mean cross-validation error. In Python, use `GridSearchCV` with 61 logarithmically spaced penalty values from $10^{-4}$ to $10^2$ for each method, placing `StandardScaler` inside a `Pipeline`. In every fit, estimate the covariate means and scales from the observations used for that fit, center the response, and leave the intercept unpenalized.
+
+Select the method with the smallest minimum cross-validation error. Produce the cross-validation plot for each of the three fits and a table comparing the three selected penalties and their cross-validation errors. Then refit the chosen model on all training observations, evaluate the final test set once, and report the selected method, its penalty, and the test error.
+
+```{python}
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import Ridge
+from sklearn.model_selection import GridSearchCV, PredefinedSplit
+
+diab = pd.read_csv("data/diabetes.csv")
+split = pd.read_csv("data/diabetes-split-folds.csv")
+assert (split["row_id"].to_numpy() == np.arange(1, len(diab) + 1)).all()   # rows match by position
+
+is_train = (split["split"] == "train").to_numpy()
+X_all = diab.drop(columns="y").to_numpy()
+y_all = diab["y"].to_numpy()
+X_tr, y_tr, X_te, y_te = X_all[is_train], y_all[is_train], X_all[~is_train], y_all[~is_train]
+folds_tr = PredefinedSplit(split.loc[is_train, "cv_fold"].astype(int).to_numpy())
+
+alphas = np.logspace(-4, 2, 61)
+models = {"lasso": Lasso(tol=1e-10, max_iter=100000),
+          "ridge": Ridge(),
+          "elastic net": ElasticNet(l1_ratio=0.5, tol=1e-10, max_iter=100000)}
+
+searches, rows = {}, []
+for name, est in models.items():
+    gs = GridSearchCV(Pipeline([("scale", StandardScaler()), ("fit", est)]),
+                      {"fit__alpha": alphas}, cv=folds_tr,
+                      scoring="neg_mean_squared_error", refit=True).fit(X_tr, y_tr)
+    searches[name] = gs
+    rows.append((name, gs.best_params_["fit__alpha"], -gs.best_score_))
+
+cv_table = pd.DataFrame(rows, columns=["method", "selected penalty", "min CV MSE"])
+print(cv_table.round(4).to_string(index=False))
+
+fig, axes = plt.subplots(1, 3, figsize=(11, 3.4), sharey=True)
+for ax, (name, gs) in zip(axes, searches.items()):
+    ax.plot(alphas, -gs.cv_results_["mean_test_score"])
+    ax.axvline(gs.best_params_["fit__alpha"], color="C1", linestyle="--")
+    ax.set_xscale("log"); ax.set_title(name); ax.set_xlabel("penalty")
+axes[0].set_ylabel("10-fold CV MSE")
+plt.tight_layout(); plt.show()
+
+best = cv_table.loc[cv_table["min CV MSE"].idxmin()]
+test_mse = np.mean((y_te - searches[best["method"]].predict(X_te)) ** 2)   # test set used once
+print(f"\nSelected: {best['method']}, penalty = {best['selected penalty']:.4f}, "
+      f"test MSE = {test_mse:.2f}")
+```
+
+The lasso has the smallest cross-validated error ($\approx3071$ at penalty $0.1$) and is selected; refit on all training data, its test MSE is $\approx2732$. The three CV errors differ by only about $2$ out of $3000$, so the choice among methods is not meaningful here — the test set was used only once, after the method and penalty were fixed. (Penalty values are not comparable across methods: scikit-learn's `Ridge` penalty is not divided by $n$ while the `Lasso` and `ElasticNet` penalties are.)
