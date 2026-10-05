@@ -1,0 +1,129 @@
+---
+title: "Homework 06"
+pagetitle: "Homework 06"
+body-classes: "lecture-page practice-page"
+format:
+  html:
+    embed-resources: true
+    html-math-method: mathml
+    page-layout: full
+    toc: true
+    toc-location: body
+    toc-title: "On this page"
+    toc-depth: 2
+---
+
+## Question 1: Compare KNN and logistic regression
+
+Use [breast-cancer.csv](data/breast-cancer.csv), which contains 569 cases from the [Wisconsin Diagnostic Breast Cancer dataset](https://archive.ics.uci.edu/dataset/17/breast%2Bcancer%2Bwisconsin%2Bdiagnostic). Predict `y` (1 for malignant and 0 for benign) using `mean_radius`, `mean_texture`, and `mean_smoothness`.
+
+Set a random seed and randomly split the observations into 70% training and 30% test data. Use the same split for every model. Standardize the predictors using the training means and standard deviations, and apply the same transformations to the test data.
+
+Fit ordinary logistic regression with an intercept and no penalty, and KNN with Euclidean distance, equal neighbor weights, and
+
+$$
+k\in\{5,15,25,35,45\}.
+$$
+
+Using the estimated probabilities for `y = 1` on the test data, plot all six ROC curves in one figure and report their AUC values. Which of the six fitted models do you prefer? Give a brief justification based on your results.
+
+I use the supplied 70/30 split in `data/breast-cancer-split.csv` (398 training, 171 test), so there is no random component and no seed is needed.
+
+```{python}
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.linear_model import LogisticRegression
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.metrics import roc_curve, roc_auc_score
+
+data = pd.read_csv("data/breast-cancer.csv")
+split = pd.read_csv("data/breast-cancer-split.csv")
+assert (split["row"].to_numpy() == np.arange(1, len(data) + 1)).all()   # rows match by position
+
+features = ["mean_radius", "mean_texture", "mean_smoothness"]
+is_train = (split["split"] == "train").to_numpy()
+X, y = data[features].to_numpy(), data["y"].to_numpy()
+
+mean, sd = X[is_train].mean(axis=0), X[is_train].std(axis=0, ddof=0)   # training statistics only
+X_train, X_test = (X[is_train] - mean) / sd, (X[~is_train] - mean) / sd
+y_train, y_test = y[is_train], y[~is_train]
+
+models = {"Logistic": LogisticRegression(penalty=None, max_iter=10000)}
+for k in [5, 15, 25, 35, 45]:
+    models[f"KNN k={k}"] = KNeighborsClassifier(n_neighbors=k, weights="uniform", algorithm="brute")
+
+styles = ["-", "--", "--", "--", "--", "--"]
+plt.figure(figsize=(6.5, 5))
+auc_rows = []
+for (name, model), ls in zip(models.items(), styles):
+    p_test = model.fit(X_train, y_train).predict_proba(X_test)[:, 1]
+    fpr, tpr, _ = roc_curve(y_test, p_test)
+    auc = roc_auc_score(y_test, p_test)
+    auc_rows.append((name, auc))
+    plt.plot(fpr, tpr, ls, lw=2 if name == "Logistic" else 1.3, label=f"{name} (AUC {auc:.3f})")
+plt.plot([0, 1], [0, 1], color="gray", lw=0.7, linestyle=":")
+plt.xlabel("False positive rate"); plt.ylabel("True positive rate")
+plt.title("Test ROC curves"); plt.legend(loc="lower right", fontsize=9); plt.tight_layout(); plt.show()
+
+pd.DataFrame(auc_rows, columns=["model", "test AUC"]).round(4)
+```
+
+I prefer logistic regression: it has the highest test AUC ($0.975$), though KNN with $k=45$ is essentially tied ($0.974$). KNN improves steadily with $k$ (from $0.933$ at $k=5$), since larger neighborhoods smooth the noisy probability estimates. Given the near-tie on 171 test cases, logistic regression wins on simplicity: no tuning parameter and interpretable coefficients.
+
+## Question 2: Training and test ROC curves
+
+Use the same data, training/test split, and standardization as in Question 1. Fit KNN with Euclidean distance, equal neighbor weights, and
+
+$$
+k\in\{1,3,5,10,20\}.
+$$
+
+Use each fitted model to estimate probabilities for both the training and test observations. For training predictions, include each observation itself among its $k$ nearest neighbors.
+
+For each $k$, use a separate panel to show the training and test ROC curves together. Report both AUC values.
+
+Explain the difference between training and test performance and how it changes with $k$. In particular, explain what happens at $k=1$ and why training performance may not reflect performance on new observations.
+
+Same split and standardization as Question 1.
+
+```{python}
+ks = [1, 3, 5, 10, 20]
+fig, axes = plt.subplots(1, 5, figsize=(15, 3.4), sharey=True)
+rows = []
+for ax, k in zip(axes, ks):
+    knn = KNeighborsClassifier(n_neighbors=k, weights="uniform", algorithm="brute").fit(X_train, y_train)
+    # predicting on the training data keeps each observation among its own k neighbors
+    for label, Xs, ys, color in [("train", X_train, y_train, "C0"), ("test", X_test, y_test, "C1")]:
+        p = knn.predict_proba(Xs)[:, 1]
+        fpr, tpr, _ = roc_curve(ys, p)
+        auc = roc_auc_score(ys, p)
+        rows.append((k, label, auc))
+        ax.plot(fpr, tpr, color=color, label=f"{label} (AUC {auc:.3f})")
+    ax.plot([0, 1], [0, 1], color="gray", lw=0.7, linestyle=":")
+    ax.set_title(f"k = {k}"); ax.set_xlabel("False positive rate"); ax.legend(loc="lower right", fontsize=8)
+axes[0].set_ylabel("True positive rate")
+plt.tight_layout(); plt.show()
+
+pd.DataFrame(rows, columns=["k", "set", "AUC"]).pivot(index="k", columns="set", values="AUC")[["train", "test"]].round(4)
+```
+
+Training AUC is higher than test AUC for every $k$, and the gap shrinks as $k$ grows (from $1.000$ vs. $0.876$ at $k=1$ to $0.988$ vs. $0.959$ at $k=20$). At $k=1$ each training point's single nearest neighbor is itself, so its predicted probability is exactly its own label and the training ROC is perfect regardless of how well the model generalizes. Larger $k$ dilutes the self-match, so the training fit becomes less optimistic. Training performance does not reflect new observations because the model has already seen the training labels; only the test curve measures performance on unseen cases.
+
+## Question 3: Peer evaluation of Homework 5
+
+You will receive two Homework 5 submissions to review. The instructor's GitHub account, **rqzhu-aide**, will open a **GitHub Issue** in the repository containing your Homework 5 submission. It will contain links to two other students' repositories, where you can find their submitted homework reports.
+
+Open your repository's **Issues** tab on GitHub to find the assignment. You may ask AI to explain GitHub Issues or help you locate the assignment.
+
+Choose **one specific mistake or item for improvement** from any question in either report.
+
+1. **Identify the mistake or item for improvement.** State which report and question you selected, and briefly describe what is wrong or could be improved. Examples include incorrect code, a calculation error, a misinterpretation of results, a plot that could communicate the findings more clearly, or anything else you think could be done better.
+
+2. **Explain your assessment.** Quote the relevant text, code, or figure caption exactly. Explain why the selected answer is incorrect or how it could be improved, referring to its reasoning, calculations, code, figures, or interpretation. **Complete this part yourself, without AI assistance.**
+
+3. **Provide a correction.** Write a corrected or improved answer to the selected question, including any calculations, code, or figures needed.
+
+After completing your review, **open a GitHub Issue in the repository containing the report you selected**. Identify the report and question, and include your assessment and a detailed revision plan explaining what the author should change and why. Include a link to your posted GitHub Issue in your Homework 6 answer.
+
+https://github.com/brisajasso/stat432-fall2026/issues/3
