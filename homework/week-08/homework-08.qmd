@@ -1,0 +1,160 @@
+---
+title: "Homework 08"
+pagetitle: "Homework 08"
+body-classes: "lecture-page practice-page"
+format:
+  html:
+    embed-resources: true
+    html-math-method: mathml
+    page-layout: full
+    toc: true
+    toc-location: body
+    toc-title: "On this page"
+    toc-depth: 2
+---
+
+The former kernel-tuning question has moved to Homework 09.
+
+Solutions for Questions 1 and 2 will be available after Monday, October 19, 2026. No solution will be provided for Question 3.
+
+For Questions 1 and 2, use either R or Python.
+
+## Question 1: Boundary and margin
+
+Use `margin-geometry-20.csv` from the combined ZIP, which contains 20 observations with predictors $x_1,x_2$ and class labels $y\in\{-1,1\}$. Consider the score
+
+$$
+f(x)=0.8x_1+0.6x_2.
+$$
+
+Since $\|(0.8,0.6)\|_2=1$, the lines $f(x)=\pm1$ are each a distance 1 from the decision boundary $f(x)=0$.
+
+a. Calculate the distance from every observation to the decision boundary and its functional margin $yf(x)$. In a table, report these values and whether each observation is inside, on, or beyond the margin for its class. Compare $yf(x)$ with 1 to make this distinction.
+
+
+```{python}
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+d = pd.read_csv("data/margin-geometry-20.csv")
+w = np.array([0.8, 0.6])                                  # ||w||_2 = 1
+X, y = d[["x1", "x2"]].to_numpy(), d["y"].to_numpy()
+
+d["f"] = X @ w
+d["distance"] = np.abs(d["f"]) / np.linalg.norm(w)        # distance to the boundary f(x) = 0
+d["yf"] = y * d["f"]                                      # functional margin
+d["position"] = np.where(np.isclose(d["yf"], 1), "on",
+                         np.where(d["yf"] < 1, "inside", "beyond"))
+d["misclassified"] = d["yf"] < 0
+d[["observation", "y", "f", "distance", "yf", "position", "misclassified"]].round(3)
+```
+
+b. Plot the observations, the boundary $f(x)=0$, and the margin lines $f(x)=\pm1$. Distinguish the two classes and identify the observations inside the margin in your plot.
+
+
+```{python}
+fig, ax = plt.subplots(figsize=(6.5, 5.2))
+for label, color, marker in [(1, "C0", "o"), (-1, "C3", "s")]:
+    m = d["y"] == label
+    ax.scatter(d.loc[m, "x1"], d.loc[m, "x2"], c=color, marker=marker, s=40, label=f"y = {label}")
+inside = d["position"] == "inside"
+ax.scatter(d.loc[inside, "x1"], d.loc[inside, "x2"], s=220, facecolors="none", edgecolors="k",
+           linewidths=1.5, label="Inside the margin")
+for _, r in d.iterrows():
+    ax.annotate(int(r["observation"]), (r["x1"], r["x2"]), textcoords="offset points", xytext=(5, 5), fontsize=8)
+
+x1 = np.array([-3.2, 3.2])
+for c, style, lab in [(0, "-", r"$f(x)=0$"), (1, "--", r"$f(x)=\pm1$"), (-1, "--", None)]:
+    ax.plot(x1, (c - 0.8 * x1) / 0.6, "k" + style, lw=1.2, label=lab)
+ax.set(xlim=(-3.2, 3.2), ylim=(-3, 3), xlabel="$x_1$", ylabel="$x_2$", aspect="equal")
+ax.legend(loc="lower right", fontsize=8); plt.tight_layout(); plt.show()
+```
+
+c. Report how many observations are inside, on, and beyond the margin. Which observations are misclassified by this decision rule?
+
+
+```{python}
+print(d["position"].value_counts().to_string())
+print("Inside the margin:", d.loc[d.position == "inside", "observation"].tolist())
+print("On the margin:", d.loc[d.position == "on", "observation"].tolist())
+print("Misclassified:", d.loc[d.misclassified, "observation"].tolist())
+```
+
+Twelve observations are beyond the margin, two (1 and 11) lie exactly on it ($yf=1$), and six are inside it (8, 9, 10, 18, 19, 20). Observations 10 ($y=1$, $f=-0.20$) and 20 ($y=-1$, $f=0.20$) are misclassified: they are inside the margin and also on the wrong side of the boundary, since $yf<0$. The other four inside points (8, 9, 18, 19) are correctly classified but closer to the boundary than distance 1.
+
+Use the observation numbers supplied in the data. Set the $x_1$ axis to $[-3.2,3.2]$, set the $x_2$ axis to $[-3,3]$, and use an equal aspect ratio. Do not fit a new classifier for this question.
+
+## Question 2: Margin in four dimensions
+
+Use `margin-geometry-4d.csv` from the combined ZIP, which contains 50 observations with four predictors and class labels $y\in\{-1,1\}$. Consider the linear score
+
+$$
+f(\mathbf{x})=\beta_0+\mathbf{x}^{\mathsf T}\boldsymbol{\beta},
+\qquad
+\beta_0=-1,
+\quad
+\boldsymbol{\beta}=(1,2,-2,4)^{\mathsf T}.
+$$
+
+a. Project the observations onto the direction of $\boldsymbol{\beta}$ and plot their positions on one axis. Distinguish the two classes and mark the decision boundary. Use the plot to calculate the geometric margin $M$, the distance from the boundary to the closest observation.
+
+b. Express the same decision boundary using the SVM normalization in which the smallest functional margin $y_i f(\mathbf{x}_i)$ is set to 1. What are the corresponding values of $\boldsymbol{\beta}$ and $\beta_0$?
+
+
+```{python}
+q = pd.read_csv("data/margin-geometry-4d.csv")
+beta, beta0 = np.array([1.0, 2.0, -2.0, 4.0]), -1.0
+Xq, yq = q[["x1", "x2", "x3", "x4"]].to_numpy(), q["y"].to_numpy()
+
+norm = np.linalg.norm(beta)                              # 5
+z = Xq @ beta / norm                                     # position along the beta direction
+z0 = -beta0 / norm                                       # boundary: x'beta + beta0 = 0
+yf = yq * (beta0 + Xq @ beta)
+print("||beta|| =", norm, "| boundary at z =", z0, "| all correctly classified:", bool(np.all(yf > 0)))
+print("Closest observations (distance to boundary):",
+      dict(zip(q.loc[np.isclose(yf, yf.min()), "observation"], (yf[np.isclose(yf, yf.min())] / norm).round(3))))
+
+M = yf.min() / norm
+print("Geometric margin M =", round(M, 4), "| smallest functional margin =", yf.min())
+
+fig, ax = plt.subplots(figsize=(7, 2.6))
+rng = np.random.default_rng(80801)
+for label, color, marker in [(1, "C0", "o"), (-1, "C3", "s")]:
+    m = yq == label
+    ax.scatter(z[m], rng.uniform(-0.3, 0.3, m.sum()), c=color, marker=marker, s=28, label=f"y = {label}")
+ax.axvline(z0, color="k", lw=1.5, label="Boundary")
+for side in (-1, 1):
+    ax.axvline(z0 + side * M, color="k", ls="--", lw=1)
+ax.annotate("", xy=(z0 + M, 0.45), xytext=(z0, 0.45), arrowprops=dict(arrowstyle="<->"))
+ax.text(z0 + M / 2, 0.5, "M", ha="center")
+ax.set(xlabel=r"Projection onto the $\beta$ direction: $x^T\beta \,/\, \|\beta\|$", yticks=[], ylim=(-0.5, 0.75))
+ax.legend(ncol=3, fontsize=8, loc="lower center", bbox_to_anchor=(0.5, 1.0)); plt.tight_layout(); plt.show()
+
+# SVM normalization: rescale (beta0, beta) so that the smallest y_i f(x_i) equals 1
+beta_svm, beta0_svm = beta / yf.min(), beta0 / yf.min()
+print("beta0 =", beta0_svm, "| beta =", beta_svm, "| 1 / ||beta|| =", 1 / np.linalg.norm(beta_svm))
+print("Smallest functional margin after rescaling:", (yq * (beta0_svm + Xq @ beta_svm)).min())
+```
+
+a. $\|\boldsymbol\beta\|_2=\sqrt{1+4+4+16}=5$, so the boundary sits at $-\beta_0/\|\boldsymbol\beta\|=0.2$ on the projection axis. The data are perfectly separated: the class $y=1$ points lie at projection $\ge1.2$ and the class $y=-1$ points at projection $\le-0.8$. The closest observations on each side are at distance exactly $1$ from the boundary, so the geometric margin is $M=1$ (there are ties on both sides).
+
+b. The closest observations have $y_if(\mathbf x_i)=5=M\|\boldsymbol\beta\|$. Dividing $(\beta_0,\boldsymbol\beta)$ by $5$ sets the smallest functional margin to $1$ without moving the boundary:
+$$
+\beta_0=-0.2,\qquad \boldsymbol\beta=(0.2,\,0.4,\,-0.4,\,0.8)^{\mathsf T}.
+$$
+Now $\|\boldsymbol\beta\|=1=1/M$, which is the SVM relationship between the normalized coefficient norm and the margin.
+
+## Question 3: Peer review of a Homework 7 skill
+
+The instructor's GitHub account, **rqzhu-aide**, will open a **GitHub Issue** in the repository containing your Homework 7 submission. It will link to **one** assigned student's repository.
+
+1. **Use the skill.** Find the complete skill definition in the assigned student's Homework 7 report. Copy it without changes into a local `SKILL.md` file in your own folder. You do not need to install it. Give your agent the path to the file and explicitly ask it to follow that skill while analyzing the `SAheart` data, using the response and predictor coding from Homework 7. Provide the necessary data information, but no additional preferences about methods, figures, model selection, or report style. Let the skill direct the analysis.
+
+   Monitor the time, your token use, and your weekly quota while the agent works. If the run is taking too long or using your allowance too quickly, you may send a **steer message** asking the agent to finish immediately, or stop the run and summarize what you observed. A steer message redirects an agent while it is working; learn how to send one in your AI tool before starting.
+
+2. **Write a peer review.** Read the student's submitted report and what the skill produced in your run. Give a brief overall assessment, followed by **three major items the author could improve**. You may comment on any aspect of the skill or report. For each item, explain what you observed, why it matters, and what you recommend changing. If you stopped the run early, explain where and why. Write the review yourself, without AI assistance.
+
+3. **Share your review.** Open a GitHub Issue in the assigned student's Homework 7 repository containing your review. Copy the same review into your Homework 8 submission report and include a link to the GitHub Issue.
+
+*[Question 3 is a peer review that I write myself, without AI assistance, after running my assigned classmate's skill. It also requires posting a GitHub Issue in their repository. I have not completed it here: my review, and the link to the Issue, go here.]*
