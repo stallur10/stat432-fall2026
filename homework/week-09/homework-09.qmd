@@ -1,0 +1,289 @@
+---
+title: "Homework 09"
+pagetitle: "Homework 09"
+body-classes: "lecture-page practice-page"
+format:
+  html:
+    embed-resources: true
+    html-math-method: mathml
+    page-layout: full
+    toc: true
+    toc-location: body
+    toc-title: "On this page"
+    toc-depth: 2
+---
+
+The kernel-tuning question moved here from Homework 08. A solution for Question 1 will be available after Monday, October 26, 2026. No solution will be provided for Question 2.
+
+## Question 1: Choosing an SVM kernel
+
+Use `saheart.csv` from the combined ZIP. As in Homework 7, predict `chd` using the same nine predictors, coding `famhist` as 1 for `Absent` and 2 for `Present`.
+
+Compare SVMs with a linear kernel, polynomial kernels of degrees 2 (quadratic), 3, and 4, and a radial basis kernel. Choose **no more than 20 candidate settings in total** across these kernels. Vary the cost $C$ for each kernel and the radial scale $\gamma$ for the radial kernel. State any other kernel settings you hold fixed.
+
+Divide the observations into five folds yourself and use the same folds for all candidates. Standardize predictors using only the fitting observations in each fold. Report the candidate settings and their mean cross-validation misclassification rates. Which kernel and settings do you prefer? Give a brief justification.
+
+I use 19 candidates (at most 20). Fixed settings: polynomial kernel $(\gamma\,\mathbf x^{\mathsf T}\mathbf x'+1)^d$ with $\gamma=1/9$ (one over the number of predictors) and offset $1$; scikit-learn's default solver and tolerance. The five folds are a random assignment with seed `90901` (sizes 93, 93, 92, 92, 92). Predictors are standardized with the mean and standard deviation (divisor $n$) of each fold's fitting observations.
+
+```{python}
+import numpy as np
+import pandas as pd
+from sklearn.svm import SVC
+
+heart = pd.read_csv("data/saheart.csv")
+heart["famhist"] = heart["famhist"].map({"Absent": 1, "Present": 2})
+X = heart.drop(columns="chd").to_numpy(dtype=float)
+y = heart["chd"].to_numpy()
+n, p = X.shape
+
+fold = np.random.default_rng(90901).permutation(np.arange(n) % 5)     # same folds for every candidate
+
+candidates = [("linear", None, C, None) for C in [0.01, 0.1, 1, 10]]
+candidates += [("polynomial", d, C, None) for d in [2, 3, 4] for C in [0.1, 1]]
+candidates += [("radial", None, C, g) for C in [0.1, 1, 10] for g in [0.01, 0.1, 0.5]]
+
+def cv_errors(kernel, degree, C, gamma):
+    errs = []
+    for k in range(5):
+        fit, val = fold != k, fold == k
+        mean, sd = X[fit].mean(axis=0), X[fit].std(axis=0)              # estimated on fitting observations only
+        args = dict(kernel={"polynomial": "poly", "radial": "rbf"}.get(kernel, kernel), C=C)
+        if kernel == "polynomial":
+            args.update(degree=degree, gamma=1 / p, coef0=1)
+        if kernel == "radial":
+            args.update(gamma=gamma)
+        model = SVC(**args).fit((X[fit] - mean) / sd, y[fit])
+        errs.append(np.mean(model.predict((X[val] - mean) / sd) != y[val]))
+    return np.array(errs)
+
+rows = []
+for kernel, degree, C, gamma in candidates:
+    e = cv_errors(kernel, degree, C, gamma)
+    rows.append((kernel, degree, C, gamma, e.mean(), e.std(ddof=1) / np.sqrt(5)))
+results = pd.DataFrame(rows, columns=["kernel", "degree", "C", "gamma", "CV error", "SE"])
+results["degree"] = results["degree"].astype("Int64")
+print("Majority-class error:", round(min(y.mean(), 1 - y.mean()), 4))
+results.round(4)
+```
+
+The lowest mean CV error is the degree-4 polynomial with $C=0.1$ ($0.266$), followed by the radial kernel with $C=10,\gamma=0.01$ ($0.271$), the degree-3 and degree-2 polynomials ($0.275$), and the linear kernel with $C=0.1$ ($0.282$). The standard errors are about $0.02$, so these differences are not meaningful: the best candidate beats the linear kernel by $0.015$, less than one standard error. The radial kernel with $C=0.1$ predicts the majority class for every observation (error $0.346$, equal to the baseline), so $C=0.1$ is too small for it.
+
+I prefer the **linear kernel with $C=0.1$** (CV error $0.282$). It is within one standard error of the best candidate, has the fewest tuning choices, and is easiest to interpret. The more flexible kernels show no reliable gain, which suggests the class boundary is close to linear in these predictors. Since the winner was picked from 19 candidates with the same folds used for comparison, its CV error is somewhat optimistic as an estimate of future error, and a separate test set would be needed for that.
+
+## Question 2: Write and use a short SVM analysis skill
+
+In Homework 8, you reviewed another student's skill. Review the comments and suggestions you received on your own Homework 7 skill. Use what you learned from both sides of the peer review to write a new, shorter skill for SVM model fitting.
+
+**Write the skill by hand.** Create a `SKILL.md` with a short name and description in YAML frontmatter. Write the entire file yourself, without asking AI to draft or edit it. The instruction body after the closing `---` of the frontmatter must be **no more than 50 lines**, including blank lines. Keep the skill independent of any particular dataset, variable names, or observed results, and load it only when you explicitly invoke it.
+
+Your skill should direct the agent to:
+
+1. judge whether the data are suitable for an SVM analysis;
+2. choose which kernels to consider and explain why;
+3. identify tuning parameters and a method for tuning them;
+4. choose an evaluation method that supports selecting a final model;
+5. require a compact figure and table that justify the choices;
+6. interpret the fit and report the key numerical results; and
+7. prioritize the evidence needed to justify the final model in **no more than one printed page at 11-point font**.
+
+**Apply the skill.** Explicitly invoke your skill to analyze `saheart.csv`, using the same response, nine predictors, and `famhist` coding as in Question 1. Provide these data details when invoking the skill, not in the skill itself. Let the skill guide the analysis, then check the resulting report and calculations.
+
+**Submit the results.** Include the one-page, 11-point analysis report in your Homework 09 submission and append the complete contents of your `SKILL.md` afterward. The appended skill is outside the one-page limit.
+
+I invoked the skill explicitly by giving the agent its path and supplying the data details only in the request. **Prompt used:** *"Follow the skill in `homework/week-09/svm-analysis/SKILL.md` to analyze `data/saheart.csv`. The response is `chd`; the predictors are the other nine columns, with `famhist` coded Absent = 1 and Present = 2."* The skill has `disable-model-invocation: true` and lives outside `.claude/skills/`, so it loads only on an explicit request. It does not specify a seed, so the agent chose `90902`. The code the agent ran is folded below, followed by the one-page report.
+
+```{python}
+#| code-fold: true
+#| code-summary: "Code the agent ran following the skill"
+import warnings
+import matplotlib.pyplot as plt
+from sklearn.model_selection import StratifiedKFold
+warnings.simplefilter("ignore")
+
+SEED = 90902
+n, p = X.shape                                   # X, y: SAheart as coded above
+prevalence = y.mean()
+
+def make(kernel, C, gamma=None, degree=None):
+    args = dict(kernel=kernel, C=C)
+    if kernel == "rbf":
+        args["gamma"] = gamma
+    if kernel == "poly":                          # fixed: gamma = 1/p, offset 1
+        args.update(degree=degree, gamma=1 / p, coef0=1)
+    return SVC(**args)
+
+def fold_errors(Xs, ys, folds, kernel, **par):
+    errs = []
+    for a, b in folds:
+        mean, sd = Xs[a].mean(axis=0), Xs[a].std(axis=0)             # scaling from fitting data only
+        model = make(kernel, **par).fit((Xs[a] - mean) / sd, ys[a])
+        errs.append(np.mean(model.predict((Xs[b] - mean) / sd) != ys[b]))
+    return np.array(errs)
+
+def grid_for(kernel, Cs, gammas):
+    if kernel == "linear":
+        return [dict(C=C) for C in Cs]
+    if kernel == "rbf":
+        return [dict(C=C, gamma=g) for C in Cs for g in gammas]
+    return [dict(C=C, degree=d) for C in Cs for d in (2, 3)]
+
+def tune(Xs, ys, kernel, seed):
+    """Log-scale grid by stratified 5-fold CV, refined once if the optimum sits at an edge."""
+    folds = list(StratifiedKFold(5, shuffle=True, random_state=seed).split(Xs, ys))
+    Cs, gammas = 10.0 ** np.arange(-3, 3), 10.0 ** np.arange(-4, 1)
+    results = {}
+    def run(grid):
+        for par in grid:
+            key = tuple(sorted(par.items()))
+            if key not in results:
+                results[key] = fold_errors(Xs, ys, folds, kernel, **par)
+    run(grid_for(kernel, Cs, gammas))
+    best = dict(min(results, key=lambda k: results[k].mean()))
+    at_edge = best["C"] in (Cs[0], Cs[-1]) or (kernel == "rbf" and best["gamma"] in (gammas[0], gammas[-1]))
+    if at_edge:                                   # one decade around the best, half-decade steps
+        steps = 10.0 ** np.arange(-1, 1.01, 0.5)
+        run(grid_for(kernel, best["C"] * steps, best.get("gamma", 1) * steps))
+        best = dict(min(results, key=lambda k: results[k].mean()))
+    return results, best, at_edge
+
+se = lambda e: e.std(ddof=1) / np.sqrt(len(e))
+Z = (X - X.mean(axis=0)) / X.std(axis=0)
+explore = {"linear_train_err": np.mean(make("linear", 1000).fit(Z, y).predict(Z) != y),
+           "rbf_train_err": np.mean(make("rbf", 1000, 1.0).fit(Z, y).predict(Z) != y)}
+
+kernels = ["linear", "rbf", "poly"]
+tuned = {k: tune(X, y, k, SEED) for k in kernels}                  # tuning CV on all observations
+
+outer = list(StratifiedKFold(5, shuffle=True, random_state=SEED + 1).split(X, y))
+nested = {k: np.array([fold_errors(X[np.r_[a, b]], y[np.r_[a, b]], [(np.arange(len(a)), len(a) + np.arange(len(b)))],
+                                   k, **tune(X[a], y[a], k, SEED + 2)[1])[0] for a, b in outer])
+          for k in kernels}                                        # nested CV: tune inside each outer training part
+
+summary = []
+for k in kernels:
+    results, best, refined = tuned[k]
+    e = results[tuple(sorted(best.items()))]
+    mean, sd = X.mean(axis=0), X.std(axis=0)
+    n_sv = make(k, **best).fit((X - mean) / sd, y).n_support_.sum()
+    label = {"linear": "Linear", "rbf": "Radial (RBF)", "poly": "Polynomial"}[k]
+    par = ", ".join(f"{a}={b:g}" for a, b in best.items())
+    summary.append(dict(Kernel=label, Parameters=par, **{"Tuning CV error (SE)": f"{e.mean():.3f} ({se(e):.3f})",
+                        "Nested CV error (SE)": f"{nested[k].mean():.3f} ({se(nested[k]):.3f})",
+                        "Support vectors": f"{n_sv} ({n_sv / n:.0%})"}))
+summary = pd.DataFrame(summary)
+
+# skill step 4: close calls go to the simplest kernel (linear < polynomial < RBF)
+order = ["linear", "poly", "rbf"]
+best_nested = min(order, key=lambda k: nested[k].mean())
+final = next(k for k in order if nested[k].mean() <= nested[best_nested].mean() + se(nested[best_nested]))
+final_best = tuned[final][1]
+R = dict(n=n, p=p, prev=f"{prevalence:.1%}", base=f"{min(prevalence, 1 - prevalence):.3f}",
+         lin_tr=f"{explore['linear_train_err']:.3f}", rbf_tr=f"{explore['rbf_train_err']:.3f}",
+         nest_lin=f"{nested['linear'].mean():.3f}", nest_lin_se=f"{se(nested['linear']):.3f}",
+         nest_rbf=f"{nested['rbf'].mean():.3f}", nest_poly=f"{nested['poly'].mean():.3f}",
+         gap=f"{nested['linear'].mean() - min(nested['rbf'].mean(), nested['poly'].mean()):.3f}",
+         final={"linear": "linear", "poly": "polynomial", "rbf": "radial"}[final],
+         final_par=", ".join(f"{a}={b:g}" for a, b in final_best.items()),
+         nest_final=f"{nested[final].mean():.3f}", nest_final_se=f"{se(nested[final]):.3f}",
+         se_best=f"{se(nested[best_nested]):.3f}", sv=summary.loc[kernels.index(final), "Support vectors"])
+print(summary.to_string(index=False)); print(final, final_best, explore)
+```
+
+
+::: {.hw-report}
+#### SVM analysis of the `SAheart` data
+
+**Suitability.** The outcome (`chd`) is binary, so this is SVM classification. There are `{python} R['n']` observations, `{python} R['p']` numeric predictors (`famhist` coded 1/2), `{python} R['prev']` with CHD, and no missing values, so a majority-class rule has error `{python} R['base']`. SVM is suitable: the sample is large relative to the dimensionality and the imbalance is moderate. Predictors are on very different scales and some are skewed (e.g. tobacco, alcohol), so they were standardized within each training part. Seed: 90902.
+
+**Kernels and tuning.** The classes overlap heavily: even with a very large cost a linear SVM misclassifies `{python} R['lin_tr']` of the training cases, so a soft margin is essential. Nonlinear kernels are feasible with this $n$, but a flexible radial fit ($C=1000,\gamma=1$) reaches training error `{python} R['rbf_tr']`, which signals overfitting risk. I therefore considered linear, radial, and polynomial (degree 2 or 3) kernels, tuning cost $C$ (all), $\gamma$ (radial; fixed at $1/p$ for the polynomial) and degree on log-scale grids with stratified 5-fold CV, refining once where the optimum sat at the grid edge. Error rate is the metric because the imbalance is moderate and misclassifications cost the same here. Because kernels were compared after tuning, I used nested CV (tuning inside each outer training part) for the comparison.
+
+```{python}
+#| echo: false
+#| fig-width: 7
+#| fig-height: 2.35
+fig, axes = plt.subplots(1, 3, figsize=(7, 2.35), sharey=True)
+def curve(ax, results, fixed, xkey, label, color, marker="o"):
+    pts = sorted((dict(k)[xkey], v) for k, v in results.items() if all(dict(k)[a] == b for a, b in fixed.items()))
+    x = np.array([a for a, _ in pts]); m = np.array([v.mean() for _, v in pts]); s = np.array([se(v) for _, v in pts])
+    ax.plot(x, m, marker + "-", ms=3, color=color, label=label); ax.fill_between(x, m - s, m + s, color=color, alpha=0.15)
+
+res, best, _ = tuned["linear"]
+curve(axes[0], res, {}, "C", "linear", "C0")
+axes[0].set_title("Linear", fontsize=9); axes[0].set_xlabel("Cost $C$", fontsize=8)
+res, best_r, _ = tuned["rbf"]
+for C, c in [(1, "C1"), (10, "C2"), (100, "C3")]:
+    curve(axes[1], res, {"C": float(C)}, "gamma", f"$C$={C}", c)
+axes[1].set_title("Radial", fontsize=9); axes[1].set_xlabel(r"$\gamma$", fontsize=8); axes[1].legend(fontsize=6.5, loc="lower right")
+res, best_p, _ = tuned["poly"]
+for d, c in [(2, "C4"), (3, "C5")]:
+    curve(axes[2], res, {"degree": d}, "C", f"degree {d}", c)
+axes[2].set_title("Polynomial", fontsize=9); axes[2].set_xlabel("Cost $C$", fontsize=8); axes[2].legend(fontsize=6.5, loc="lower right")
+for ax, (k, bp, xk) in zip(axes, [("linear", tuned["linear"][1], "C"), ("rbf", best_r, "gamma"), ("poly", best_p, "C")]):
+    e = tuned[k][0][tuple(sorted(bp.items()))]
+    ax.plot([bp[xk]], [e.mean()], marker="*", ms=12, color="gold", mec="k", ls="none", zorder=5)
+    ax.set_xscale("log"); ax.tick_params(labelsize=7)
+axes[0].set_ylabel("5-fold CV error (band: ±1 SE)", fontsize=8)
+plt.tight_layout(); plt.show()
+```
+
+```{python}
+#| echo: false
+summary.set_index("Kernel")
+```
+
+**Results.** Nested-CV error was `{python} R['nest_lin']` (SE `{python} R['nest_lin_se']`) for the linear kernel, `{python} R['nest_rbf']` for radial, and `{python} R['nest_poly']` for polynomial; all beat the majority baseline (`{python} R['base']`). The linear kernel trails the best by `{python} R['gap']`, about one standard error (`{python} R['se_best']`), and falls just outside the one-standard-error band, so the skill's rule does not select it. Radial and polynomial tie, and the polynomial kernel is simpler, so the **`{python} R['final']` kernel (`{python} R['final_par']`)** is the final model, with nested-CV error `{python} R['nest_final']` (SE `{python} R['nest_final_se']`). It uses `{python} R['sv']` of the observations as support vectors, a high fraction that reflects class overlap. No separate holdout set was supplied, so the nested-CV error is the estimate of prediction error.
+
+**Caveat.** A gap of about one standard error neither shows that the kernels differ nor that they perform equally, so the choice among them is close to a judgment call; the nested-CV error is mildly optimistic because the best of three kernels was chosen, and with one dataset of 462 cases and moderate imbalance all estimates are noisy.
+:::
+
+```{=html}
+<style>
+.hw-report { font-size: 11pt; line-height: 1.3; }
+.hw-report p { margin: 0 0 0.5em 0; }
+@media print { @page { margin: 0.6in; } .hw-report { break-before: page; break-after: page; } }
+</style>
+```
+
+### `SKILL.md`
+
+```{.markdown filename="svm-analysis/SKILL.md"}
+---
+name: svm-analysis
+description: Plan, tune, evaluate, and report a support vector machine (SVM) analysis with a one-page justification. Invoke explicitly only.
+disable-model-invocation: true
+---
+
+# SVM Analysis Workflow
+
+Follow these steps in order. Keep all reasoning general; never assume a particular dataset, variable names, or results.
+
+1. Suitability check
+   * Confirm the outcome is categorical (classification) or numeric (SVR), and state which.
+   * Check sample size, number of predictors, class balance, missing values, and outliers.
+   * Note whether predictors are numeric or need encoding; SVMs need scaling, so standardize predictors using training data only.
+   * State clearly if SVM is a poor fit (e.g., very large n, mostly noise features, severe imbalance) and what you do about it.
+2. Kernel selection
+   * Consider linear, radial basis (RBF), and optionally polynomial kernels.
+   * Justify each with data-based evidence (separation in exploratory plots, dimensionality relative to n, expected nonlinearity).
+   * Prefer the simplest kernel that performs comparably.
+3. Tuning
+   * Name the parameters per kernel: cost C (all), gamma (RBF/polynomial), degree (polynomial), epsilon (SVR).
+   * Tune with a grid on a log scale, refined once around the best region if the optimum sits at an edge.
+   * Tune inside cross-validation only; never use the test set for tuning.
+4. Evaluation
+   * Use repeated or stratified k-fold cross-validation (or nested CV when comparing tuned kernels) to select the final model.
+   * Choose a metric matching the goal (accuracy, AUC, F1, or RMSE) and justify it, especially under imbalance.
+   * Apply the one-standard-error rule or a tie-break toward simplicity when models are close.
+   * If a holdout set exists, use it once, after selection, for an unbiased estimate.
+5. Required exhibits (compact)
+   * One figure: tuning performance across parameter values for each kernel, with error bars or bands and the chosen setting marked.
+   * One table: for each kernel, the best parameters, CV metric with uncertainty, and number of support vectors.
+6. Interpretation and key numbers
+   * Report the final kernel, tuned parameters, CV metric (with spread), holdout metric if available, and the support vector count or fraction.
+   * Interpret: a high support vector fraction suggests overlap or complexity; large gamma suggests overfitting risk; compare against a simple baseline.
+   * Mention limitations and any sensitivity to scaling or class imbalance.
+7. Page budget
+   * The written report must fit one printed page at 11-point font, including the figure and table.
+   * Prioritize: (a) suitability verdict, (b) kernel and tuning rationale, (c) the figure and table, (d) final model with key numbers, (e) one-sentence caveat.
+   * Cut background, code, and exploratory detail that does not support the final model choice.
+```
